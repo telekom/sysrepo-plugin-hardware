@@ -1,0 +1,1 @@
+executable('ietf-hardware-plugin', 'ietf-hardware-plugin.cc', install : true)
