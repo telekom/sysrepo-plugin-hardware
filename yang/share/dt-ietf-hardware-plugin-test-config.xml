@@ -1,0 +1,10 @@
+<hardware xmlns="urn:ietf:params:xml:ns:yang:ietf-hardware">
+    <component>
+        <name>test1</name>
+        <class xmlns:iana-hardware="urn:ietf:params:xml:ns:yang:iana-hardware">iana-hardware:unknown</class>
+    </component>
+    <component>
+        <name>test2</name>
+        <class xmlns:iana-hardware="urn:ietf:params:xml:ns:yang:iana-hardware">iana-hardware:unknown</class>
+    </component>
+</hardware>
