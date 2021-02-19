@@ -26,6 +26,8 @@
 #include <fstream>
 #include <unordered_map>
 
+namespace hardware {
+
 struct OperationalCallback : public sysrepo::Callback {
     using S_Data_Node = libyang::S_Data_Node;
     using S_Context = libyang::S_Context;
@@ -36,11 +38,11 @@ struct OperationalCallback : public sysrepo::Callback {
     using IStreamWrapper = rapidjson::IStreamWrapper;
 
     int module_change([[maybe_unused]] S_Session session,
-                        char const* module_name,
-                        [[maybe_unused]] char const* xpath,
-                        sr_event_t event,
-                        uint32_t /* request_id */,
-                        void* /* private_ctx */) override {
+                      char const* module_name,
+                      [[maybe_unused]] char const* xpath,
+                      sr_event_t event,
+                      uint32_t /* request_id */,
+                      void* /* private_ctx */) override {
         printCurrentConfig(session, module_name);
         return SR_ERR_OK;
     }
@@ -55,7 +57,7 @@ struct OperationalCallback : public sysrepo::Callback {
         parent = nullptr;
 
         int rc = system("/usr/bin/lshw -json > /tmp/hardware_components.json");
-        if(rc == -1) {
+        if (rc == -1) {
             logMessage(SR_LL_ERR, std::string("lshw command failed"));
             return SR_ERR_CALLBACK_FAILED;
         }
@@ -67,7 +69,7 @@ struct OperationalCallback : public sysrepo::Callback {
 
         Document doc;
         doc.ParseStream(isw);
-        if(!doc.IsArray()) {
+        if (!doc.IsArray()) {
             logMessage(SR_LL_ERR, "lshw json root-node is not an array");
             return SR_ERR_CALLBACK_FAILED;
         }
@@ -75,8 +77,7 @@ struct OperationalCallback : public sysrepo::Callback {
         auto newArray = doc.GetArray();
 
         std::vector<std::string> temp;
-        parseArray(session, parent, request_xpath, newArray,
-                   std::string(), temp);
+        parseArray(session, parent, request_xpath, newArray, std::string(), temp);
 
         if (!parent) {
             return SR_ERR_CALLBACK_FAILED;
@@ -93,30 +94,34 @@ struct OperationalCallback : public sysrepo::Callback {
         for (auto& m : parsee.GetArray()) {
             Value::ConstMemberIterator itr = m.FindMember("id");
             std::string name;
-            if(itr != m.MemberEnd()) {
+            if (itr != m.MemberEnd()) {
                 name = itr->value.GetString();
             }
             for (auto const& mapValue : getMap()) {
                 std::string const stringValue = mapValue.first;
                 if ((itr = m.FindMember(stringValue.c_str())) != m.MemberEnd()) {
-                    setValue(session, parent, request_xpath + std::string("/component[name='") +
-                             name + "']" + mapValue.second, itr->value.GetString());
+                    setValue(session, parent,
+                             request_xpath + std::string("/component[name='") + name + "']" +
+                                 mapValue.second,
+                             itr->value.GetString());
                 }
             }
             if (!parentName.empty()) {
-                setValue(session, parent, request_xpath + std::string("/component[name='") +
-                         name + "']/parent", parentName.c_str());
+                setValue(session, parent,
+                         request_xpath + std::string("/component[name='") + name + "']/parent",
+                         parentName.c_str());
             }
             if ((itr = m.FindMember("children")) != m.MemberEnd()) {
                 std::vector<std::string> temp;
                 parseArray(session, parent, request_xpath, itr->value.GetArray(), name, temp);
                 // childlist to value
                 for (auto const& elem : temp) {
-                    setValue(session, parent, request_xpath + std::string("/component[name='") +
-                             name + "']/contains-child", elem);
+                    setValue(session, parent,
+                             request_xpath + std::string("/component[name='") + name +
+                                 "']/contains-child",
+                             elem);
                 }
             }
-
         }
     }
 
@@ -127,7 +132,7 @@ struct OperationalCallback : public sysrepo::Callback {
             if (values == nullptr)
                 return;
 
-            for(unsigned int i = 0; i < values->val_cnt(); i++)
+            for (unsigned int i = 0; i < values->val_cnt(); i++)
                 logMessage(SR_LL_INF, values->val(i)->to_string());
 
         } catch (const std::exception& e) {
@@ -135,15 +140,13 @@ struct OperationalCallback : public sysrepo::Callback {
         }
     }
 
-    bool setValue(S_Session& session,
-                  S_Data_Node& parent,
-                  std::string node_xpath,
-                  std::string value) {
+    bool
+    setValue(S_Session& session, S_Data_Node& parent, std::string node_xpath, std::string value) {
         try {
             S_Context ctx = session->get_context();
             if (parent) {
-                parent->new_path(ctx, node_xpath.c_str(), value.c_str(),
-                                 LYD_ANYDATA_CONSTSTRING, 0);
+                parent->new_path(ctx, node_xpath.c_str(), value.c_str(), LYD_ANYDATA_CONSTSTRING,
+                                 0);
             } else {
                 parent = make_shared<Data_Node>(ctx, node_xpath.c_str(), value.c_str(),
                                                 LYD_ANYDATA_CONSTSTRING, 0);
@@ -156,16 +159,14 @@ struct OperationalCallback : public sysrepo::Callback {
     }
 
     static std::unordered_map<std::string, std::string> const& getMap() {
-        static std::unordered_map<std::string, std::string> const _ {
-            {"description", "/description"},
-            {"vendor", "/mfg-name"},
-            {"serial", "/serial-num"},
-            {"product", "/model-name"},
-            {"version", "/hardware-rev"},
-            {"handle", "/alias"}
-        };
+        static std::unordered_map<std::string, std::string> const _{
+            {"description", "/description"}, {"vendor", "/mfg-name"},
+            {"serial", "/serial-num"},       {"product", "/model-name"},
+            {"version", "/hardware-rev"},    {"handle", "/alias"}};
         return _;
     }
 };
+
+}  // namespace hardware
 
 #endif  // OPERATIONAL_CALLBACK_H

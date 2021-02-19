@@ -23,18 +23,18 @@
 void logMessage(sr_log_level_t log, std::string msg) {
     msg = "IETF-Hardware: " + msg;
     switch (log) {
-        case SR_LL_ERR:
-            SRP_LOG_ERRMSG(msg.c_str());
-            break;
-        case SR_LL_WRN:
-            SRP_LOG_WRNMSG(msg.c_str());
-            break;
-        case SR_LL_INF:
-            SRP_LOG_INFMSG(msg.c_str());
-            break;
-        case SR_LL_DBG:
-        default:
-            SRP_LOG_DBGMSG(msg.c_str());
+    case SR_LL_ERR:
+        SRP_LOG_ERRMSG(msg.c_str());
+        break;
+    case SR_LL_WRN:
+        SRP_LOG_WRNMSG(msg.c_str());
+        break;
+    case SR_LL_INF:
+        SRP_LOG_INFMSG(msg.c_str());
+        break;
+    case SR_LL_DBG:
+    default:
+        SRP_LOG_DBGMSG(msg.c_str());
     }
 }
 
