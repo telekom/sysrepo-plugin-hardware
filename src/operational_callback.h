@@ -76,8 +76,7 @@ struct OperationalCallback : public sysrepo::Callback {
 
         auto newArray = doc.GetArray();
 
-        std::vector<std::string> temp;
-        parseArray(session, parent, request_xpath, newArray, std::string(), temp);
+        parseArray(session, parent, request_xpath, newArray, std::string());
 
         if (!parent) {
             return SR_ERR_CALLBACK_FAILED;
@@ -85,44 +84,103 @@ struct OperationalCallback : public sysrepo::Callback {
         return SR_ERR_OK;
     }
 
-    void parseArray(S_Session& session,
-                    S_Data_Node& parent,
-                    char const* request_xpath,
-                    Value const& parsee,
-                    std::string const& parentName,
-                    std::vector<std::string>& childList) {
+    std::string toIANAclass(std::string inputClass) {
+        std::string returnedClass;
+        static std::unordered_map<std::string, std::string> _{
+            {"storage", "iana-hardware:storage-drive"},
+            {"power", "iana-hardware:battery"},
+            {"processor", "iana-hardware:cpu"},
+            {"network", "iana-hardware:port"}};
+
+        if (_.find(inputClass) != _.end()) {
+            returnedClass = _.at(inputClass);
+        }
+        return returnedClass;
+    }
+
+    std::vector<std::string> parseArray(S_Session& session,
+                                        S_Data_Node& parent,
+                                        char const* request_xpath,
+                                        Value const& parsee,
+                                        std::string const& parentName) {
+        std::vector<std::string> siblings;
         for (auto& m : parsee.GetArray()) {
             Value::ConstMemberIterator itr = m.FindMember("id");
-            std::string name;
+            std::string name, componentPath;
             if (itr != m.MemberEnd()) {
                 name = itr->value.GetString();
+                componentPath = request_xpath + std::string("/component[name='") + name + "']";
+            } else {
+                // invalid entry, go to the next one
+                continue;
             }
-            for (auto const& mapValue : getMap()) {
+
+            // firmware node, skip this one and set the parent's firmware-rev
+            // +--ro firmware-rev?     string
+            if (name == "firmware" && !parentName.empty() &&
+                (itr = m.FindMember("version")) != m.MemberEnd()) {
+                componentPath =
+                    request_xpath + std::string("/component[name='") + parentName + "']";
+                setValue(session, parent, componentPath + "/firmware-rev", itr->value.GetString());
+                continue;
+            }
+            siblings.push_back(name);
+
+            // +--rw name              string
+            // +--ro description?      string
+            // +--ro hardware-rev?     string
+            // +--ro serial-num?       string
+            // +--ro mfg-name?         string
+            // +--ro model-name?       string
+            // +--rw alias?            string
+            for (auto const& mapValue : getLSHWtoIETFmap()) {
                 std::string const stringValue = mapValue.first;
                 if ((itr = m.FindMember(stringValue.c_str())) != m.MemberEnd()) {
-                    setValue(session, parent,
-                             request_xpath + std::string("/component[name='") + name + "']" +
-                                 mapValue.second,
+                    setValue(session, parent, componentPath + mapValue.second,
                              itr->value.GetString());
                 }
             }
+
+            // +--rw class             identityref
+            if ((itr = m.FindMember("class")) != m.MemberEnd()) {
+                std::string ianaClass = toIANAclass(itr->value.GetString());
+                if (!ianaClass.empty()) {
+                    setValue(session, parent, componentPath + "/class", ianaClass);
+                }
+            }
+            // +--ro software-rev?     string
+            // +--ro uuid?             yang:uuid
+            if ((itr = m.FindMember("configuration")) != m.MemberEnd()) {
+                Value::ConstMemberIterator config_elem = itr->value.FindMember("uuid");
+                if (config_elem != itr->value.MemberEnd()) {
+                    setValue(session, parent, componentPath + "/uuid",
+                             config_elem->value.GetString());
+                }
+                if ((config_elem = itr->value.FindMember("driverversion")) !=
+                    itr->value.MemberEnd()) {
+                    setValue(session, parent, componentPath + "/software-rev",
+                             config_elem->value.GetString());
+                }
+                if ((config_elem = itr->value.FindMember("firmware")) != itr->value.MemberEnd()) {
+                    setValue(session, parent, componentPath + "/firmware-rev",
+                             config_elem->value.GetString());
+                }
+            }
+            // +--rw parent?           -> ../../component/name
             if (!parentName.empty()) {
-                setValue(session, parent,
-                         request_xpath + std::string("/component[name='") + name + "']/parent",
-                         parentName.c_str());
+                setValue(session, parent, componentPath + "/parent", parentName.c_str());
             }
             if ((itr = m.FindMember("children")) != m.MemberEnd()) {
-                std::vector<std::string> temp;
-                parseArray(session, parent, request_xpath, itr->value.GetArray(), name, temp);
+                std::vector<std::string> childList =
+                    parseArray(session, parent, request_xpath, itr->value.GetArray(), name);
                 // childlist to value
-                for (auto const& elem : temp) {
-                    setValue(session, parent,
-                             request_xpath + std::string("/component[name='") + name +
-                                 "']/contains-child",
-                             elem);
+                // +--ro contains-child*   -> ../../component/name
+                for (auto const& elem : childList) {
+                    setValue(session, parent, componentPath + "/contains-child", elem);
                 }
             }
         }
+        return siblings;
     }
 
     void printCurrentConfig(S_Session session, char const* module_name) {
@@ -152,13 +210,13 @@ struct OperationalCallback : public sysrepo::Callback {
                                                 LYD_ANYDATA_CONSTSTRING, 0);
             }
         } catch (std::exception const& e) {
-            logMessage(SR_LL_ERR, "At path " + node_xpath + ", value " + value + " " + e.what());
+            logMessage(SR_LL_WRN, "At path " + node_xpath + ", value " + value + " " + e.what());
             return false;
         }
         return true;
     }
 
-    static std::unordered_map<std::string, std::string> const& getMap() {
+    static std::unordered_map<std::string, std::string> const& getLSHWtoIETFmap() {
         static std::unordered_map<std::string, std::string> const _{
             {"description", "/description"}, {"vendor", "/mfg-name"},
             {"serial", "/serial-num"},       {"product", "/model-name"},

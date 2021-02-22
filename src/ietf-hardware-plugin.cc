@@ -44,7 +44,7 @@ static HardwareModel theModel;
 int sr_plugin_init_cb(sr_session_ctx_t* session, void** /*private_data*/) {
     theModel.sess = std::make_shared<Session>(session);
     theModel.subscription = std::make_shared<Subscribe>(theModel.sess);
-    S_Callback callback = std::make_shared<OperationalCallback>();
+    S_Callback callback = std::make_shared<hardware::OperationalCallback>();
 
     std::string oper_xpath("/" + HardwareModel::moduleName + ":" + "hardware");
     try {
