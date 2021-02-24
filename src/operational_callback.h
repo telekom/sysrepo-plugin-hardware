@@ -23,6 +23,7 @@
 #include <rapidjson/document.h>
 #include <rapidjson/istreamwrapper.h>
 
+#include <chrono>
 #include <fstream>
 #include <unordered_map>
 
@@ -60,6 +61,14 @@ struct OperationalCallback : public sysrepo::Callback {
         if (rc == -1) {
             logMessage(SR_LL_ERR, std::string("lshw command failed"));
             return SR_ERR_CALLBACK_FAILED;
+        }
+
+        // +--ro last-change?   yang:date-and-time
+        std::time_t lastChange(std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()));
+        char timeString[100];
+        if (std::strftime(timeString, sizeof(timeString), "%FT%TZ", std::localtime(&lastChange))) {
+            setValue(session, parent, request_xpath + std::string("/last-change"),
+                     timeString);
         }
 
         logMessage(SR_LL_DBG, std::string("lshw command returned:") + std::to_string(rc));
