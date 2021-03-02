@@ -18,7 +18,9 @@
 #ifndef OPERATIONAL_CALLBACK_H
 #define OPERATIONAL_CALLBACK_H
 
-#include <globals.h>
+#include <sensor_data.h>
+#include <utils/globals.h>
+#include <utils/magic_enum.hpp>
 
 #include <rapidjson/document.h>
 #include <rapidjson/istreamwrapper.h>
@@ -62,16 +64,15 @@ struct OperationalCallback : public sysrepo::Callback {
             logMessage(SR_LL_ERR, std::string("lshw command failed"));
             return SR_ERR_CALLBACK_FAILED;
         }
+        logMessage(SR_LL_DBG, std::string("lshw command returned:") + std::to_string(rc));
 
         // +--ro last-change?   yang:date-and-time
-        std::time_t lastChange(std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()));
+        std::time_t lastChange(
+            std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()));
         char timeString[100];
         if (std::strftime(timeString, sizeof(timeString), "%FT%TZ", std::localtime(&lastChange))) {
-            setValue(session, parent, request_xpath + std::string("/last-change"),
-                     timeString);
+            setValue(session, parent, request_xpath + std::string("/last-change"), timeString);
         }
-
-        logMessage(SR_LL_DBG, std::string("lshw command returned:") + std::to_string(rc));
 
         std::ifstream ifs("/tmp/hardware_components.json", std::ifstream::in);
         IStreamWrapper isw(ifs);
@@ -85,7 +86,15 @@ struct OperationalCallback : public sysrepo::Callback {
 
         auto newArray = doc.GetArray();
 
-        parseArray(session, parent, request_xpath, newArray, std::string());
+        parseAndSetComponents(session, parent, request_xpath, newArray, std::string());
+
+        try {
+            HardwareSensors hwsens;
+            std::vector<Sensor> sensors = hwsens.parseSensorData();
+            setSensorData(session, parent, request_xpath, sensors);
+        } catch (std::exception const& e) {
+            logMessage(SR_LL_WRN, "hardware-sensors nodes failure: " + std::string(e.what()));
+        }
 
         if (!parent) {
             return SR_ERR_CALLBACK_FAILED;
@@ -93,7 +102,7 @@ struct OperationalCallback : public sysrepo::Callback {
         return SR_ERR_OK;
     }
 
-    std::string toIANAclass(std::string inputClass) {
+    static std::string toIANAclass(std::string const& inputClass) {
         std::string returnedClass;
         static std::unordered_map<std::string, std::string> _{
             {"storage", "iana-hardware:storage-drive"},
@@ -107,11 +116,37 @@ struct OperationalCallback : public sysrepo::Callback {
         return returnedClass;
     }
 
-    std::vector<std::string> parseArray(S_Session& session,
-                                        S_Data_Node& parent,
-                                        char const* request_xpath,
-                                        Value const& parsee,
-                                        std::string const& parentName) {
+    void setSensorData(S_Session& session,
+                       S_Data_Node& parent,
+                       char const* request_xpath,
+                       std::vector<Sensor> const& sensors) {
+        for (auto& sensor : sensors) {
+            std::string sensorPath =
+                request_xpath + std::string("/component[name='") + sensor.name + "']";
+            setValue(session, parent, sensorPath + "/class", "iana-hardware:sensor");
+            setValue(session, parent, sensorPath + "/sensor-data/value",
+                     std::to_string(sensor.value));
+            setValue(session, parent, sensorPath + "/sensor-data/value-type",
+                     Sensor::getValueTypeForModel(sensor.valueType));
+            setValue(session, parent, sensorPath + "/sensor-data/value-scale",
+                     std::string(magic_enum::enum_name(sensor.valueScale)));
+            setValue(session, parent, sensorPath + "/sensor-data/value-precision",
+                     std::to_string(sensor.valuePrecision));
+            setValue(session, parent, sensorPath + "/sensor-data/oper-status", "ok");
+            char timeString[100];
+            if (std::strftime(timeString, sizeof(timeString), "%FT%TZ",
+                              std::localtime(&sensor.valueTimestamp))) {
+                setValue(session, parent, sensorPath + std::string("/sensor-data/value-timestamp"),
+                         timeString);
+            }
+        }
+    }
+
+    std::vector<std::string> parseAndSetComponents(S_Session& session,
+                                                   S_Data_Node& parent,
+                                                   char const* request_xpath,
+                                                   Value const& parsee,
+                                                   std::string const& parentName) {
         std::vector<std::string> siblings;
         for (auto& m : parsee.GetArray()) {
             Value::ConstMemberIterator itr = m.FindMember("id");
@@ -180,8 +215,8 @@ struct OperationalCallback : public sysrepo::Callback {
                 setValue(session, parent, componentPath + "/parent", parentName.c_str());
             }
             if ((itr = m.FindMember("children")) != m.MemberEnd()) {
-                std::vector<std::string> childList =
-                    parseArray(session, parent, request_xpath, itr->value.GetArray(), name);
+                std::vector<std::string> childList = parseAndSetComponents(
+                    session, parent, request_xpath, itr->value.GetArray(), name);
                 // childlist to value
                 // +--ro contains-child*   -> ../../component/name
                 for (auto const& elem : childList) {
@@ -192,7 +227,7 @@ struct OperationalCallback : public sysrepo::Callback {
         return siblings;
     }
 
-    void printCurrentConfig(S_Session session, char const* module_name) {
+    void printCurrentConfig(S_Session& session, char const* module_name) {
         try {
             std::string xpath(std::string("/") + module_name + std::string(":*//*"));
             auto values = session->get_items(xpath.c_str());
@@ -200,15 +235,17 @@ struct OperationalCallback : public sysrepo::Callback {
                 return;
 
             for (unsigned int i = 0; i < values->val_cnt(); i++)
-                logMessage(SR_LL_INF, values->val(i)->to_string());
+                logMessage(SR_LL_DBG, values->val(i)->to_string());
 
         } catch (const std::exception& e) {
-            logMessage(SR_LL_ERR, e.what());
+            logMessage(SR_LL_WRN, e.what());
         }
     }
 
-    bool
-    setValue(S_Session& session, S_Data_Node& parent, std::string node_xpath, std::string value) {
+    bool setValue(S_Session& session,
+                  S_Data_Node& parent,
+                  std::string const& node_xpath,
+                  std::string const& value) {
         try {
             S_Context ctx = session->get_context();
             if (parent) {
