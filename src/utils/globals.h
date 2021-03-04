@@ -20,6 +20,8 @@
 
 #include <sysrepo-cpp/Session.hpp>
 
+#define COMPONENTS_LOCATION "/tmp/hardware_components.json"
+
 void logMessage(sr_log_level_t log, std::string msg) {
     msg = "IETF-Hardware: " + msg;
     switch (log) {

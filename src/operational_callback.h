@@ -66,7 +66,7 @@ struct OperationalCallback : public sysrepo::Callback {
 
         std::string const set_xpath("/ietf-hardware:hardware");
 
-        int rc = system("/usr/bin/lshw -json > /tmp/hardware_components.json");
+        int rc = system("/usr/bin/lshw -json > " COMPONENTS_LOCATION);
         if (rc == -1) {
             logMessage(SR_LL_ERR, "lshw command failed");
             return SR_ERR_CALLBACK_FAILED;
@@ -81,9 +81,9 @@ struct OperationalCallback : public sysrepo::Callback {
             setValue(session, parent, set_xpath + "/last-change", timeString);
         }
 
-        std::ifstream ifs("/tmp/hardware_components.json", std::ifstream::in);
+        std::ifstream ifs(COMPONENTS_LOCATION, std::ifstream::in);
         if (ifs.fail()) {
-            logMessage(SR_LL_ERR, "Can't open: /tmp/hardware_components.json");
+            logMessage(SR_LL_ERR, "Can't open: " COMPONENTS_LOCATION);
             return SR_ERR_CALLBACK_FAILED;
         }
         IStreamWrapper isw(ifs);
@@ -271,8 +271,8 @@ struct OperationalCallback : public sysrepo::Callback {
                 parent->new_path(ctx, node_xpath.c_str(), value.c_str(), LYD_ANYDATA_CONSTSTRING,
                                  0);
             } else {
-                parent = make_shared<Data_Node>(ctx, node_xpath.c_str(), value.c_str(),
-                                                LYD_ANYDATA_CONSTSTRING, 0);
+                parent = std::make_shared<Data_Node>(ctx, node_xpath.c_str(), value.c_str(),
+                                                     LYD_ANYDATA_CONSTSTRING, 0);
             }
         } catch (std::exception const& e) {
             logMessage(SR_LL_WRN, "At path " + node_xpath + ", value " + value + " " + e.what());
