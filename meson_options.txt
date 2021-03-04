@@ -1,1 +1,0 @@
-option('sysrepo-prefix', type: 'string', description: 'point to the Sysrepo install directory')

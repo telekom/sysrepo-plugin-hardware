@@ -10,18 +10,18 @@ The plugin is built as a shared library using the [MESON build system](https://m
 apt install meson ninja-build
 ```
 
-The plugin install location is specified at build time: under `{sysrepo-prefix}/lib/sysrepo/plugins`\
+The plugin install location is the `{prefix}` folder, the `libietf-hardware-plugin.so` should be copied over to the `plugins` folder from the sysrepo installation\
 Build by making a build directory (i.e. build/), run meson in that dir, and then use ninja to build the desired target.
 
 ```bash
 mkdir /opt/dt-ietf-hardware
-meson -D prefix="/opt/dt-ietf-hardware" -D sysrepo-prefix="/opt/sysrepo" ./build
+meson -D prefix="/opt/dt-ietf-hardware" ./build
 ninja -C ./build
 ```
 
 ## Installing
 
-Meson installs the shared-library in the `{sysrepo-prefix}/lib/sysrepo/plugins` and the .yang files necessary for the plugin functionality under {prefix}/yang
+Meson installs the shared-library in the `{prefix}` and the .yang files necessary for the plugin functionality under {prefix}/yang
 
 ```bash
 meson install -C ./build
