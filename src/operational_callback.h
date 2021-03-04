@@ -21,12 +21,12 @@
 #include <sensor_data.h>
 #include <utils/globals.h>
 #include <utils/magic_enum.hpp>
-
-#include <rapidjson/document.h>
-#include <rapidjson/istreamwrapper.h>
+#include <utils/rapidjson/document.h>
+#include <utils/rapidjson/istreamwrapper.h>
 
 #include <chrono>
 #include <fstream>
+#include <regex>
 #include <unordered_map>
 
 namespace hardware {
@@ -59,22 +59,33 @@ struct OperationalCallback : public sysrepo::Callback {
                        void* /* private_data */) override {
         parent = nullptr;
 
-        int rc = system("/usr/bin/lshw -json > /tmp/hardware_components.json");
-        if (rc == -1) {
-            logMessage(SR_LL_ERR, std::string("lshw command failed"));
+        if (!std::regex_search(request_xpath, std::regex("ietf-hardware:(.*)"))) {
+            logMessage(SR_LL_ERR, std::string("Invalid requested xpath: ") + request_xpath);
             return SR_ERR_CALLBACK_FAILED;
         }
-        logMessage(SR_LL_DBG, std::string("lshw command returned:") + std::to_string(rc));
+
+        std::string const set_xpath("/ietf-hardware:hardware");
+
+        int rc = system("/usr/bin/lshw -json > /tmp/hardware_components.json");
+        if (rc == -1) {
+            logMessage(SR_LL_ERR, "lshw command failed");
+            return SR_ERR_CALLBACK_FAILED;
+        }
+        logMessage(SR_LL_DBG, "lshw command returned:" + std::to_string(rc));
 
         // +--ro last-change?   yang:date-and-time
         std::time_t lastChange(
             std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()));
         char timeString[100];
         if (std::strftime(timeString, sizeof(timeString), "%FT%TZ", std::localtime(&lastChange))) {
-            setValue(session, parent, request_xpath + std::string("/last-change"), timeString);
+            setValue(session, parent, set_xpath + "/last-change", timeString);
         }
 
         std::ifstream ifs("/tmp/hardware_components.json", std::ifstream::in);
+        if (ifs.fail()) {
+            logMessage(SR_LL_ERR, "Can't open: /tmp/hardware_components.json");
+            return SR_ERR_CALLBACK_FAILED;
+        }
         IStreamWrapper isw(ifs);
 
         Document doc;
@@ -86,12 +97,12 @@ struct OperationalCallback : public sysrepo::Callback {
 
         auto newArray = doc.GetArray();
 
-        parseAndSetComponents(session, parent, request_xpath, newArray, std::string());
+        parseAndSetComponents(session, parent, set_xpath, newArray, std::string());
 
         try {
             HardwareSensors hwsens;
             std::vector<Sensor> sensors = hwsens.parseSensorData();
-            setSensorData(session, parent, request_xpath, sensors);
+            setSensorData(session, parent, set_xpath, sensors);
         } catch (std::exception const& e) {
             logMessage(SR_LL_WRN, "hardware-sensors nodes failure: " + std::string(e.what()));
         }
@@ -118,11 +129,10 @@ struct OperationalCallback : public sysrepo::Callback {
 
     void setSensorData(S_Session& session,
                        S_Data_Node& parent,
-                       char const* request_xpath,
+                       std::string const& request_xpath,
                        std::vector<Sensor> const& sensors) {
         for (auto& sensor : sensors) {
-            std::string sensorPath =
-                request_xpath + std::string("/component[name='") + sensor.name + "']";
+            std::string sensorPath = request_xpath + "/component[name='" + sensor.name + "']";
             setValue(session, parent, sensorPath + "/class", "iana-hardware:sensor");
             setValue(session, parent, sensorPath + "/sensor-data/value",
                      std::to_string(sensor.value));
@@ -144,7 +154,7 @@ struct OperationalCallback : public sysrepo::Callback {
 
     std::vector<std::string> parseAndSetComponents(S_Session& session,
                                                    S_Data_Node& parent,
-                                                   char const* request_xpath,
+                                                   std::string const& request_xpath,
                                                    Value const& parsee,
                                                    std::string const& parentName) {
         std::vector<std::string> siblings;
@@ -153,7 +163,7 @@ struct OperationalCallback : public sysrepo::Callback {
             std::string name, componentPath;
             if (itr != m.MemberEnd()) {
                 name = itr->value.GetString();
-                componentPath = request_xpath + std::string("/component[name='") + name + "']";
+                componentPath = request_xpath + "/component[name='" + name + "']";
             } else {
                 // invalid entry, go to the next one
                 continue;
@@ -163,8 +173,7 @@ struct OperationalCallback : public sysrepo::Callback {
             // +--ro firmware-rev?     string
             if (name == "firmware" && !parentName.empty() &&
                 (itr = m.FindMember("version")) != m.MemberEnd()) {
-                componentPath =
-                    request_xpath + std::string("/component[name='") + parentName + "']";
+                componentPath = request_xpath + "/component[name='" + parentName + "']";
                 setValue(session, parent, componentPath + "/firmware-rev", itr->value.GetString());
                 continue;
             }

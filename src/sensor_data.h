@@ -15,8 +15,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef SENSORS_H
-#define SENSORS_H
+#ifndef SENSOR_DATA_H
+#define SENSOR_DATA_H
 
 #include <utils/globals.h>
 
@@ -149,10 +149,10 @@ struct HardwareSensors {
 
     std::vector<Sensor> parseSensorData() {
         std::vector<Sensor> sensors;
-        sensors_chip_name const* cn;
+        sensors_chip_name const* cn = nullptr;
         int c = 0;
         while ((cn = sensors_get_detected_chips(0, &c))) {
-            sensors_feature const* feature;
+            sensors_feature const* feature = nullptr;
             int f = 0;
             while ((feature = sensors_get_features(cn, &f))) {
                 Sensor tempSensor(std::string(cn->prefix) + "/" + feature->name);
@@ -180,7 +180,18 @@ struct HardwareSensors {
                     result = tempSensor.setValueFromSubfeature(
                         cn, feature, SENSORS_SUBFEATURE_FAN_INPUT, tempSensor.valuePrecision);
                     break;
+                case SENSORS_FEATURE_POWER:
+                    tempSensor.valueType = Sensor::ValueType::watts;
+                    result = tempSensor.setValueFromSubfeature(
+                        cn, feature, SENSORS_SUBFEATURE_POWER_INPUT, tempSensor.valuePrecision);
+                    break;
+                case SENSORS_FEATURE_HUMIDITY:
+                    tempSensor.valueType = Sensor::ValueType::percent_rh;
+                    result = tempSensor.setValueFromSubfeature(
+                        cn, feature, SENSORS_SUBFEATURE_HUMIDITY_INPUT, tempSensor.valuePrecision);
+                    break;
                 default:
+                    tempSensor.valueType = Sensor::ValueType::other;
                     break;
                 }
                 if (result) {
@@ -194,4 +205,4 @@ struct HardwareSensors {
 
 }  // namespace hardware
 
-#endif  // SENSORS_H
+#endif  // SENSOR_DATA_H
