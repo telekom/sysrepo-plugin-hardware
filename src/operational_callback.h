@@ -143,6 +143,14 @@ struct OperationalCallback : public sysrepo::Callback {
             setValue(session, parent, sensorPath + "/sensor-data/value-precision",
                      std::to_string(sensor.valuePrecision));
             setValue(session, parent, sensorPath + "/sensor-data/oper-status", "ok");
+            if (sensor.valueScale == Sensor::ValueScale::units) {
+                setValue(session, parent, sensorPath + "/sensor-data/units-display",
+                         Sensor::getValueTypeForModel(sensor.valueType));
+            } else {
+                std::string const unit = std::string(magic_enum::enum_name(sensor.valueScale)) +
+                                         " " + Sensor::getValueTypeForModel(sensor.valueType);
+                setValue(session, parent, sensorPath + "/sensor-data/units-display", unit);
+            }
             char timeString[100];
             if (std::strftime(timeString, sizeof(timeString), "%FT%TZ",
                               std::localtime(&sensor.valueTimestamp))) {

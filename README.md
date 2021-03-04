@@ -51,7 +51,11 @@ sysrepocfg -x "/ietf-hardware:hardware" -X -d operational -f json
 ```
 libyang
 libsysrepo
-libsensors - TBA
+libsensors
+```
+
+```bash
+sudo apt install lm-sensors libsensors-dev
 ```
 
 ### Nodes that are currently implemented
@@ -91,15 +95,15 @@ module: ietf-hardware
         |  +--ro usage-state?          usage-state
         |  +--ro alarm-state?          alarm-state
         |  +--ro standby-state?        standby-state
-        +--ro sensor-data {hardware-sensor}?                          IN PROGRESS
-           +--ro value?               sensor-value
-           +--ro value-type?          sensor-value-type
-           +--ro value-scale?         sensor-value-scale
-           +--ro value-precision?     sensor-value-precision
-           +--ro oper-status?         sensor-status
-           +--ro units-display?       string
-           +--ro value-timestamp?     yang:date-and-time
-           +--ro value-update-rate?   uint32
+        +--ro sensor-data {hardware-sensor}?                          DONE
+           +--ro value?               sensor-value                    DONE
+           +--ro value-type?          sensor-value-type               DONE
+           +--ro value-scale?         sensor-value-scale              DONE
+           +--ro value-precision?     sensor-value-precision          DONE
+           +--ro oper-status?         sensor-status                   DONE
+           +--ro units-display?       string                          DONE
+           +--ro value-timestamp?     yang:date-and-time              DONE
+           +--ro value-update-rate?   uint32                          NA
 
   notifications:                                                      UNDER INVESTIGATION
     +---n hardware-state-change
