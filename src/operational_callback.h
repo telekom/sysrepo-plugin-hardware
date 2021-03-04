@@ -157,6 +157,8 @@ struct OperationalCallback : public sysrepo::Callback {
                 setValue(session, parent, sensorPath + std::string("/sensor-data/value-timestamp"),
                          timeString);
             }
+            setValue(session, parent, sensorPath + std::string("/sensor-data/value-update-rate"),
+                     "0");
         }
     }
 

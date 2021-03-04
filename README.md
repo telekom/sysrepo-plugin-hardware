@@ -103,7 +103,7 @@ module: ietf-hardware
            +--ro oper-status?         sensor-status                   DONE
            +--ro units-display?       string                          DONE
            +--ro value-timestamp?     yang:date-and-time              DONE
-           +--ro value-update-rate?   uint32                          NA
+           +--ro value-update-rate?   uint32                          DONE
 
   notifications:                                                      UNDER INVESTIGATION
     +---n hardware-state-change
