@@ -114,7 +114,7 @@ struct OperationalCallback : public sysrepo::Callback {
     }
 
     static std::string toIANAclass(std::string const& inputClass) {
-        std::string returnedClass;
+        std::string returnedClass("iana-hardware:unknown");
         static std::unordered_map<std::string, std::string> _{
             {"storage", "iana-hardware:storage-drive"},
             {"power", "iana-hardware:battery"},
@@ -187,7 +187,30 @@ struct OperationalCallback : public sysrepo::Callback {
                 setValue(session, parent, componentPath + "/firmware-rev", itr->value.GetString());
                 continue;
             }
-            siblings.push_back(name);
+
+            // Check if a node with the current name exists, if so rename the current one
+            libyang::S_Set nameSet = parent->find_path(componentPath.c_str());
+            if (nameSet && nameSet->size() != 0) {
+                name = parentName + ":" + name;
+                componentPath = request_xpath + "/component[name='" + name + "']";
+            }
+
+            bool wasSet(true);
+            // +--rw class             identityref
+            if ((itr = m.FindMember("class")) != m.MemberEnd()) {
+                wasSet = setValue(session, parent, componentPath + "/class",
+                                  toIANAclass(itr->value.GetString()));
+            } else {
+                wasSet =
+                    setValue(session, parent, componentPath + "/class", "iana-hardware:unknown");
+            }
+
+            // If no node was set at this point, no need to continue, no further nodes can be set
+            if (wasSet) {
+                siblings.push_back(name);
+            } else {
+                continue;
+            }
 
             // +--rw name              string
             // +--ro description?      string
@@ -204,13 +227,6 @@ struct OperationalCallback : public sysrepo::Callback {
                 }
             }
 
-            // +--rw class             identityref
-            if ((itr = m.FindMember("class")) != m.MemberEnd()) {
-                std::string ianaClass = toIANAclass(itr->value.GetString());
-                if (!ianaClass.empty()) {
-                    setValue(session, parent, componentPath + "/class", ianaClass);
-                }
-            }
             // +--ro software-rev?     string
             // +--ro uuid?             yang:uuid
             if ((itr = m.FindMember("configuration")) != m.MemberEnd()) {
@@ -229,6 +245,7 @@ struct OperationalCallback : public sysrepo::Callback {
                              config_elem->value.GetString());
                 }
             }
+
             // +--rw parent?           -> ../../component/name
             if (!parentName.empty()) {
                 setValue(session, parent, componentPath + "/parent", parentName.c_str());
@@ -274,8 +291,9 @@ struct OperationalCallback : public sysrepo::Callback {
                 parent = std::make_shared<Data_Node>(ctx, node_xpath.c_str(), value.c_str(),
                                                      LYD_ANYDATA_CONSTSTRING, 0);
             }
-        } catch (std::exception const& e) {
-            logMessage(SR_LL_WRN, "At path " + node_xpath + ", value " + value + " " + e.what());
+        } catch (std::runtime_error const& e) {
+            logMessage(SR_LL_WRN,
+                       "At path " + node_xpath + ", value " + value + " " + ", error: " + e.what());
             return false;
         }
         return true;
