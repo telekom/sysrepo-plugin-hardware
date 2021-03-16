@@ -7,7 +7,7 @@ A sysrepo plugin for the IETF-Hardware YANG module [RFC8348](https://tools.ietf.
 The plugin is built as a shared library using the [MESON build system](https://mesonbuild.com/) and is required for building the plugin.
 
 ```bash
-apt install meson ninja-build
+apt install meson ninja-build cmake
 ```
 
 The plugin install location is the `{prefix}` folder, the `libietf-hardware-plugin.so` should be copied over to the `plugins` folder from the sysrepo installation\
@@ -33,6 +33,7 @@ The necessary .yang files need to be installed in sysrepo from `{prefix}/yang`:
 ```bash
 sysrepoctl -i /opt/dt-ietf-hardware/yang/iana-hardware.yang
 sysrepoctl -i /opt/dt-ietf-hardware/yang/ietf-hardware.yang
+sysrepoctl -c ietf-hardware -e hardware-sensor
 ```
 
 The sysrepo plugin daemon needs to be loaded after the plugin is installed
@@ -62,7 +63,7 @@ sudo apt install lm-sensors libsensors-dev
 DONE - nodes are implemented and a value is provided if such information can be retrieved\
 NA - node is not implemented because the value can't be found in Debian systems\
 IN PROGRESS - values can be partly available\
-UNDER INVESTIGATION - values are not yet provided, could be in the future
+NOT IMPLEMENTED - values are not yet provided, could be in the future
 
 ```
 module: ietf-hardware
@@ -74,7 +75,7 @@ module: ietf-hardware
         +--ro physical-index?   int32 {entity-mib}?                   NA (feature not available)
         +--ro description?      string                                DONE
         +--rw parent?           -> ../../component/name               DONE
-        +--rw parent-rel-pos?   int32                                 IN PROGRESS
+        +--rw parent-rel-pos?   int32                                 DONE
         +--ro contains-child*   -> ../../component/name               DONE
         +--ro hardware-rev?     string                                DONE
         +--ro firmware-rev?     string                                DONE
@@ -88,7 +89,7 @@ module: ietf-hardware
         +--ro mfg-date?         yang:date-and-time                    NA
         +--rw uri*              inet:uri                              NA
         +--ro uuid?             yang:uuid                             DONE
-        +--rw state {hardware-state}?                                 UNDER INVESTIGATION
+        +--rw state {hardware-state}?                                 NOT IMPLEMENTED
         |  +--ro state-last-changed?   yang:date-and-time
         |  +--rw admin-state?          admin-state
         |  +--ro oper-state?           oper-state
@@ -105,7 +106,7 @@ module: ietf-hardware
            +--ro value-timestamp?     yang:date-and-time              DONE
            +--ro value-update-rate?   uint32                          DONE
 
-  notifications:                                                      UNDER INVESTIGATION
+  notifications:                                                      NOT IMPLEMENTED
     +---n hardware-state-change
     +---n hardware-state-oper-enabled {hardware-state}?
     |  +--ro name?          -> /hardware/component/name

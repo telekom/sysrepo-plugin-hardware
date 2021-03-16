@@ -168,6 +168,7 @@ struct OperationalCallback : public sysrepo::Callback {
                                                    Value const& parsee,
                                                    std::string const& parentName) {
         std::vector<std::string> siblings;
+        int32_t parent_rel_pos(0);
         for (auto& m : parsee.GetArray()) {
             Value::ConstMemberIterator itr = m.FindMember("id");
             std::string name, componentPath;
@@ -247,8 +248,12 @@ struct OperationalCallback : public sysrepo::Callback {
             }
 
             // +--rw parent?           -> ../../component/name
+            // +--rw parent-rel-pos?   int32
             if (!parentName.empty()) {
-                setValue(session, parent, componentPath + "/parent", parentName.c_str());
+                setValue(session, parent, componentPath + "/parent", parentName);
+                setValue(session, parent, componentPath + "/parent-rel-pos",
+                         std::to_string(parent_rel_pos));
+                parent_rel_pos++;
             }
             if ((itr = m.FindMember("children")) != m.MemberEnd()) {
                 std::vector<std::string> childList = parseAndSetComponents(
