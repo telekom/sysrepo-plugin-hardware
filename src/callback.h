@@ -15,8 +15,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef OPERATIONAL_CALLBACK_H
-#define OPERATIONAL_CALLBACK_H
+#ifndef CALLBACK_H
+#define CALLBACK_H
 
 #include <sensor_data.h>
 #include <utils/globals.h>
@@ -31,7 +31,7 @@
 
 namespace hardware {
 
-struct OperationalCallback : public sysrepo::Callback {
+struct Callback {
     using S_Data_Node = libyang::S_Data_Node;
     using S_Context = libyang::S_Context;
     using Data_Node = libyang::Data_Node;
@@ -40,23 +40,21 @@ struct OperationalCallback : public sysrepo::Callback {
     using Document = rapidjson::Document;
     using IStreamWrapper = rapidjson::IStreamWrapper;
 
-    int module_change([[maybe_unused]] S_Session session,
-                      char const* module_name,
-                      [[maybe_unused]] char const* xpath,
-                      sr_event_t event,
-                      uint32_t /* request_id */,
-                      void* /* private_ctx */) override {
+    static int configurationCallback([[maybe_unused]] S_Session session,
+                                     char const* module_name,
+                                     [[maybe_unused]] char const* xpath,
+                                     sr_event_t event,
+                                     uint32_t /* request_id */) {
         printCurrentConfig(session, module_name);
         return SR_ERR_OK;
     }
 
-    int oper_get_items(sysrepo::S_Session session,
-                       const char* module_name,
-                       const char* /* path */,
-                       const char* request_xpath,
-                       uint32_t /* request_id */,
-                       S_Data_Node& parent,
-                       void* /* private_data */) override {
+    static int operationalCallback(S_Session session,
+                                   const char* module_name,
+                                   const char* /* path */,
+                                   const char* request_xpath,
+                                   uint32_t /* request_id */,
+                                   S_Data_Node& parent) {
         parent = nullptr;
 
         if (!std::regex_search(request_xpath, std::regex("ietf-hardware:(.*)"))) {
@@ -127,10 +125,10 @@ struct OperationalCallback : public sysrepo::Callback {
         return returnedClass;
     }
 
-    void setSensorData(S_Session& session,
-                       S_Data_Node& parent,
-                       std::string const& request_xpath,
-                       std::vector<Sensor> const& sensors) {
+    static void setSensorData(S_Session& session,
+                              S_Data_Node& parent,
+                              std::string const& request_xpath,
+                              std::vector<Sensor> const& sensors) {
         for (auto& sensor : sensors) {
             std::string sensorPath = request_xpath + "/component[name='" + sensor.name + "']";
             setValue(session, parent, sensorPath + "/class", "iana-hardware:sensor");
@@ -162,11 +160,11 @@ struct OperationalCallback : public sysrepo::Callback {
         }
     }
 
-    std::vector<std::string> parseAndSetComponents(S_Session& session,
-                                                   S_Data_Node& parent,
-                                                   std::string const& request_xpath,
-                                                   Value const& parsee,
-                                                   std::string const& parentName) {
+    static std::vector<std::string> parseAndSetComponents(S_Session& session,
+                                                          S_Data_Node& parent,
+                                                          std::string const& request_xpath,
+                                                          Value const& parsee,
+                                                          std::string const& parentName) {
         std::vector<std::string> siblings;
         int32_t parent_rel_pos(0);
         for (auto& m : parsee.GetArray()) {
@@ -268,7 +266,7 @@ struct OperationalCallback : public sysrepo::Callback {
         return siblings;
     }
 
-    void printCurrentConfig(S_Session& session, char const* module_name) {
+    static void printCurrentConfig(S_Session& session, char const* module_name) {
         try {
             std::string xpath(std::string("/") + module_name + std::string(":*//*"));
             auto values = session->get_items(xpath.c_str());
@@ -283,10 +281,10 @@ struct OperationalCallback : public sysrepo::Callback {
         }
     }
 
-    bool setValue(S_Session& session,
-                  S_Data_Node& parent,
-                  std::string const& node_xpath,
-                  std::string const& value) {
+    static bool setValue(S_Session& session,
+                         S_Data_Node& parent,
+                         std::string const& node_xpath,
+                         std::string const& value) {
         try {
             S_Context ctx = session->get_context();
             if (parent) {
@@ -315,4 +313,4 @@ struct OperationalCallback : public sysrepo::Callback {
 
 }  // namespace hardware
 
-#endif  // OPERATIONAL_CALLBACK_H
+#endif  // CALLBACK_H
