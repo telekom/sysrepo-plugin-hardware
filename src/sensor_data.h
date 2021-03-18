@@ -78,6 +78,30 @@ struct Sensor {
         yotta = 17
     };
 
+    static std::string getValueScaleString(ValueScale inputScale) {
+        static std::array<std::string, 18> _{
+            "units", // unused
+            "yocto",
+            "zepto",
+            "atto",
+            "femto",
+            "pico",
+            "nano",
+            "micro",
+            "millis",
+            "units",
+            "kilo",
+            "mega",
+            "giga",
+            "tera",
+            "peta",
+            "exa",
+            "zetta",
+            "yotta"
+        };
+        return _[static_cast<size_t>(inputScale)];
+    }
+
     static std::string getValueTypeForModel(ValueType inputType) {
         std::string returnedType;
         static std::unordered_map<ValueType, std::string> _{

@@ -20,7 +20,6 @@
 
 #include <sensor_data.h>
 #include <utils/globals.h>
-#include <utils/magic_enum.hpp>
 #include <utils/rapidjson/document.h>
 #include <utils/rapidjson/istreamwrapper.h>
 
@@ -137,7 +136,7 @@ struct Callback {
             setValue(session, parent, sensorPath + "/sensor-data/value-type",
                      Sensor::getValueTypeForModel(sensor.valueType));
             setValue(session, parent, sensorPath + "/sensor-data/value-scale",
-                     std::string(magic_enum::enum_name(sensor.valueScale)));
+                     Sensor::getValueScaleString(sensor.valueScale));
             setValue(session, parent, sensorPath + "/sensor-data/value-precision",
                      std::to_string(sensor.valuePrecision));
             setValue(session, parent, sensorPath + "/sensor-data/oper-status", "ok");
@@ -145,7 +144,7 @@ struct Callback {
                 setValue(session, parent, sensorPath + "/sensor-data/units-display",
                          Sensor::getValueTypeForModel(sensor.valueType));
             } else {
-                std::string const unit = std::string(magic_enum::enum_name(sensor.valueScale)) +
+                std::string const unit = Sensor::getValueScaleString(sensor.valueScale) +
                                          " " + Sensor::getValueTypeForModel(sensor.valueType);
                 setValue(session, parent, sensorPath + "/sensor-data/units-display", unit);
             }
