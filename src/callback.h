@@ -87,14 +87,12 @@ struct Callback {
 
         Document doc;
         doc.ParseStream(isw);
-        if (!doc.IsArray()) {
-            logMessage(SR_LL_ERR, "lshw json root-node is not an array");
+        if (!doc.IsObject() && !doc.IsArray()) {
+            logMessage(SR_LL_ERR, "lshw json root-node is not an object or array");
             return SR_ERR_CALLBACK_FAILED;
         }
 
-        auto newArray = doc.GetArray();
-
-        parseAndSetComponents(session, parent, set_xpath, newArray, std::string());
+        parseAndSetComponents(session, parent, set_xpath, doc, std::string());
 
         try {
             HardwareSensors hwsens;
@@ -144,8 +142,8 @@ struct Callback {
                 setValue(session, parent, sensorPath + "/sensor-data/units-display",
                          Sensor::getValueTypeForModel(sensor.valueType));
             } else {
-                std::string const unit = Sensor::getValueScaleString(sensor.valueScale) +
-                                         " " + Sensor::getValueTypeForModel(sensor.valueType);
+                std::string const unit = Sensor::getValueScaleString(sensor.valueScale) + " " +
+                                         Sensor::getValueTypeForModel(sensor.valueType);
                 setValue(session, parent, sensorPath + "/sensor-data/units-display", unit);
             }
             char timeString[100];
@@ -159,6 +157,103 @@ struct Callback {
         }
     }
 
+    static std::string parseAndSetComponent(S_Session& session,
+                                            S_Data_Node& parent,
+                                            std::string const& request_xpath,
+                                            Value const& parsee,
+                                            std::string const& parentName,
+                                            Value::ConstMemberIterator itr,
+                                            int32_t& parent_rel_pos) {
+        std::string name, componentPath;
+        if (itr != parsee.MemberEnd()) {
+            name = itr->value.GetString();
+            componentPath = request_xpath + "/component[name='" + name + "']";
+        } else {
+            // invalid entry, go to the next one
+            return std::string();
+        }
+
+        // firmware node, skip this one and set the parent's firmware-rev
+        // +--ro firmware-rev?     string
+        if (name == "firmware" && !parentName.empty() &&
+            (itr = parsee.FindMember("version")) != parsee.MemberEnd()) {
+            componentPath = request_xpath + "/component[name='" + parentName + "']";
+            setValue(session, parent, componentPath + "/firmware-rev", itr->value.GetString());
+            return std::string();
+        }
+
+        // Check if a node with the current name exists, if so rename the current one
+        libyang::S_Set nameSet = parent->find_path(componentPath.c_str());
+        if (nameSet && nameSet->size() != 0) {
+            name = parentName + ":" + name;
+            componentPath = request_xpath + "/component[name='" + name + "']";
+        }
+
+        bool wasSet(true);
+        // +--rw class             identityref
+        if ((itr = parsee.FindMember("class")) != parsee.MemberEnd()) {
+            wasSet = setValue(session, parent, componentPath + "/class",
+                              toIANAclass(itr->value.GetString()));
+        } else {
+            wasSet = setValue(session, parent, componentPath + "/class", "iana-hardware:unknown");
+        }
+
+        // If no node was set at this point, no need to continue, no further nodes can be set
+        if (!wasSet) {
+            return std::string();
+        }
+
+        // +--rw name              string
+        // +--ro description?      string
+        // +--ro hardware-rev?     string
+        // +--ro serial-num?       string
+        // +--ro mfg-name?         string
+        // +--ro model-name?       string
+        // +--rw alias?            string
+        for (auto const& mapValue : getLSHWtoIETFmap()) {
+            std::string const stringValue = mapValue.first;
+            if ((itr = parsee.FindMember(stringValue.c_str())) != parsee.MemberEnd()) {
+                setValue(session, parent, componentPath + mapValue.second, itr->value.GetString());
+            }
+        }
+
+        // +--ro software-rev?     string
+        // +--ro uuid?             yang:uuid
+        if ((itr = parsee.FindMember("configuration")) != parsee.MemberEnd()) {
+            Value::ConstMemberIterator config_elem = itr->value.FindMember("uuid");
+            if (config_elem != itr->value.MemberEnd()) {
+                setValue(session, parent, componentPath + "/uuid", config_elem->value.GetString());
+            }
+            if ((config_elem = itr->value.FindMember("driverversion")) != itr->value.MemberEnd()) {
+                setValue(session, parent, componentPath + "/software-rev",
+                         config_elem->value.GetString());
+            }
+            if ((config_elem = itr->value.FindMember("firmware")) != itr->value.MemberEnd()) {
+                setValue(session, parent, componentPath + "/firmware-rev",
+                         config_elem->value.GetString());
+            }
+        }
+
+        // +--rw parent?           -> ../../component/name
+        // +--rw parent-rel-pos?   int32
+        if (!parentName.empty()) {
+            setValue(session, parent, componentPath + "/parent", parentName);
+            setValue(session, parent, componentPath + "/parent-rel-pos",
+                     std::to_string(parent_rel_pos));
+            parent_rel_pos++;
+        }
+        if ((itr = parsee.FindMember("children")) != parsee.MemberEnd()) {
+            std::vector<std::string> childList =
+                parseAndSetComponents(session, parent, request_xpath, itr->value.GetArray(), name);
+            // childlist to value
+            // +--ro contains-child*   -> ../../component/name
+            for (auto const& elem : childList) {
+                setValue(session, parent, componentPath + "/contains-child", elem);
+            }
+        }
+        return name;
+    }
+
     static std::vector<std::string> parseAndSetComponents(S_Session& session,
                                                           S_Data_Node& parent,
                                                           std::string const& request_xpath,
@@ -166,100 +261,23 @@ struct Callback {
                                                           std::string const& parentName) {
         std::vector<std::string> siblings;
         int32_t parent_rel_pos(0);
+
+        if (!parsee.IsArray()) {
+            std::string name(parseAndSetComponent(session, parent, request_xpath, parsee,
+                                                  parentName, parsee.MemberBegin(),
+                                                  parent_rel_pos));
+            if (!name.empty()) {
+                siblings.emplace_back(name);
+            }
+            return siblings;
+        }
+
         for (auto& m : parsee.GetArray()) {
             Value::ConstMemberIterator itr = m.FindMember("id");
-            std::string name, componentPath;
-            if (itr != m.MemberEnd()) {
-                name = itr->value.GetString();
-                componentPath = request_xpath + "/component[name='" + name + "']";
-            } else {
-                // invalid entry, go to the next one
-                continue;
-            }
-
-            // firmware node, skip this one and set the parent's firmware-rev
-            // +--ro firmware-rev?     string
-            if (name == "firmware" && !parentName.empty() &&
-                (itr = m.FindMember("version")) != m.MemberEnd()) {
-                componentPath = request_xpath + "/component[name='" + parentName + "']";
-                setValue(session, parent, componentPath + "/firmware-rev", itr->value.GetString());
-                continue;
-            }
-
-            // Check if a node with the current name exists, if so rename the current one
-            libyang::S_Set nameSet = parent->find_path(componentPath.c_str());
-            if (nameSet && nameSet->size() != 0) {
-                name = parentName + ":" + name;
-                componentPath = request_xpath + "/component[name='" + name + "']";
-            }
-
-            bool wasSet(true);
-            // +--rw class             identityref
-            if ((itr = m.FindMember("class")) != m.MemberEnd()) {
-                wasSet = setValue(session, parent, componentPath + "/class",
-                                  toIANAclass(itr->value.GetString()));
-            } else {
-                wasSet =
-                    setValue(session, parent, componentPath + "/class", "iana-hardware:unknown");
-            }
-
-            // If no node was set at this point, no need to continue, no further nodes can be set
-            if (wasSet) {
-                siblings.push_back(name);
-            } else {
-                continue;
-            }
-
-            // +--rw name              string
-            // +--ro description?      string
-            // +--ro hardware-rev?     string
-            // +--ro serial-num?       string
-            // +--ro mfg-name?         string
-            // +--ro model-name?       string
-            // +--rw alias?            string
-            for (auto const& mapValue : getLSHWtoIETFmap()) {
-                std::string const stringValue = mapValue.first;
-                if ((itr = m.FindMember(stringValue.c_str())) != m.MemberEnd()) {
-                    setValue(session, parent, componentPath + mapValue.second,
-                             itr->value.GetString());
-                }
-            }
-
-            // +--ro software-rev?     string
-            // +--ro uuid?             yang:uuid
-            if ((itr = m.FindMember("configuration")) != m.MemberEnd()) {
-                Value::ConstMemberIterator config_elem = itr->value.FindMember("uuid");
-                if (config_elem != itr->value.MemberEnd()) {
-                    setValue(session, parent, componentPath + "/uuid",
-                             config_elem->value.GetString());
-                }
-                if ((config_elem = itr->value.FindMember("driverversion")) !=
-                    itr->value.MemberEnd()) {
-                    setValue(session, parent, componentPath + "/software-rev",
-                             config_elem->value.GetString());
-                }
-                if ((config_elem = itr->value.FindMember("firmware")) != itr->value.MemberEnd()) {
-                    setValue(session, parent, componentPath + "/firmware-rev",
-                             config_elem->value.GetString());
-                }
-            }
-
-            // +--rw parent?           -> ../../component/name
-            // +--rw parent-rel-pos?   int32
-            if (!parentName.empty()) {
-                setValue(session, parent, componentPath + "/parent", parentName);
-                setValue(session, parent, componentPath + "/parent-rel-pos",
-                         std::to_string(parent_rel_pos));
-                parent_rel_pos++;
-            }
-            if ((itr = m.FindMember("children")) != m.MemberEnd()) {
-                std::vector<std::string> childList = parseAndSetComponents(
-                    session, parent, request_xpath, itr->value.GetArray(), name);
-                // childlist to value
-                // +--ro contains-child*   -> ../../component/name
-                for (auto const& elem : childList) {
-                    setValue(session, parent, componentPath + "/contains-child", elem);
-                }
+            std::string name(parseAndSetComponent(session, parent, request_xpath, m, parentName,
+                                                  itr, parent_rel_pos));
+            if (!name.empty()) {
+                siblings.emplace_back(name);
             }
         }
         return siblings;
