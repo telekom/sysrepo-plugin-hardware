@@ -156,6 +156,7 @@ struct ComponentData {
         }
         std::cout << std::endl;
     }
+
     std::string name;
     std::string classType;
     std::optional<int32_t> physicalID;

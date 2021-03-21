@@ -79,30 +79,14 @@ struct Sensor {
     };
 
     static std::string getValueScaleString(ValueScale inputScale) {
-        static std::array<std::string, 18> _{
-            "units", // unused
-            "yocto",
-            "zepto",
-            "atto",
-            "femto",
-            "pico",
-            "nano",
-            "micro",
-            "millis",
-            "units",
-            "kilo",
-            "mega",
-            "giga",
-            "tera",
-            "peta",
-            "exa",
-            "zetta",
-            "yotta"
-        };
+        static std::array<std::string, 18> _{"units",  // unused
+                                             "yocto", "zepto",  "atto",  "femto", "pico", "nano",
+                                             "micro", "millis", "units", "kilo",  "mega", "giga",
+                                             "tera",  "peta",   "exa",   "zetta", "yotta"};
         return _[static_cast<size_t>(inputScale)];
     }
 
-    static std::string getValueTypeForModel(ValueType inputType) {
+    static std::string getValueTypeString(ValueType inputType) {
         std::string returnedType;
         static std::unordered_map<ValueType, std::string> _{
             {ValueType::other, "other"},
@@ -121,6 +105,36 @@ struct Sensor {
             returnedType = _.at(inputType);
         }
         return returnedType;
+    }
+
+    void setXpathForAllMembers(sysrepo::S_Session& session,
+                               libyang::S_Data_Node& parent,
+                               std::string const& mainXpath) const {
+        std::string sensorPath = mainXpath + "/component[name='" + name + "']";
+        setXpath(session, parent, sensorPath + "/class", "iana-hardware:sensor");
+        setXpath(session, parent, sensorPath + "/sensor-data/value", std::to_string(value));
+        setXpath(session, parent, sensorPath + "/sensor-data/value-type",
+                 getValueTypeString(valueType));
+        setXpath(session, parent, sensorPath + "/sensor-data/value-scale",
+                 getValueScaleString(valueScale));
+        setXpath(session, parent, sensorPath + "/sensor-data/value-precision",
+                 std::to_string(valuePrecision));
+        setXpath(session, parent, sensorPath + "/sensor-data/oper-status", "ok");
+        if (valueScale == Sensor::ValueScale::units) {
+            setXpath(session, parent, sensorPath + "/sensor-data/units-display",
+                     getValueTypeString(valueType));
+        } else {
+            std::string const unit =
+                getValueScaleString(valueScale) + " " + getValueTypeString(valueType);
+            setXpath(session, parent, sensorPath + "/sensor-data/units-display", unit);
+        }
+        char timeString[100];
+        if (std::strftime(timeString, sizeof(timeString), "%FT%TZ",
+                          std::localtime(&valueTimestamp))) {
+            setXpath(session, parent, sensorPath + std::string("/sensor-data/value-timestamp"),
+                     timeString);
+        }
+        setXpath(session, parent, sensorPath + std::string("/sensor-data/value-update-rate"), "0");
     }
 
     bool setValueFromSubfeature(sensors_chip_name const* cn,
