@@ -18,6 +18,7 @@
 #ifndef CALLBACK_H
 #define CALLBACK_H
 
+#include <component_data.h>
 #include <sensor_data.h>
 #include <utils/globals.h>
 #include <utils/rapidjson/document.h>
@@ -55,9 +56,15 @@ struct Callback {
                                    uint32_t /* request_id */,
                                    S_Data_Node& parent) {
         parent = nullptr;
-
-        if (!std::regex_search(request_xpath, std::regex("ietf-hardware:(.*)"))) {
-            logMessage(SR_LL_ERR, std::string("Invalid requested xpath: ") + request_xpath);
+        std::smatch sm;
+        std::string filteredName;
+        std::string request_xpath_string(request_xpath);
+        if (std::regex_search(
+                request_xpath_string, sm,
+                std::regex("ietf-hardware:hardware/component\\[name='(.*?)'\\](.*)"))) {
+            filteredName = sm[1];
+        } else if (!std::regex_search(request_xpath_string, std::regex("ietf-hardware:(.*)"))) {
+            logMessage(SR_LL_ERR, std::string("Invalid requested xpath: ") + request_xpath_string);
             return SR_ERR_CALLBACK_FAILED;
         }
 
@@ -75,8 +82,10 @@ struct Callback {
             std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()));
         char timeString[100];
         if (std::strftime(timeString, sizeof(timeString), "%FT%TZ", std::localtime(&lastChange))) {
-            setValue(session, parent, set_xpath + "/last-change", timeString);
+            setXpath(session, parent, set_xpath + "/last-change", timeString);
         }
+
+        std::unordered_map<std::string, ComponentData> hwComponents;
 
         std::ifstream ifs(COMPONENTS_LOCATION, std::ifstream::in);
         if (ifs.fail()) {
@@ -92,7 +101,10 @@ struct Callback {
             return SR_ERR_CALLBACK_FAILED;
         }
 
-        parseAndSetComponents(session, parent, set_xpath, doc, std::string());
+        parseAndSetComponents(doc, hwComponents, std::string());
+        for (auto const& c : hwComponents) {
+            c.second.setXpathForAllMembers(session, parent, set_xpath);
+        }
 
         try {
             HardwareSensors hwsens;
@@ -128,46 +140,44 @@ struct Callback {
                               std::vector<Sensor> const& sensors) {
         for (auto& sensor : sensors) {
             std::string sensorPath = request_xpath + "/component[name='" + sensor.name + "']";
-            setValue(session, parent, sensorPath + "/class", "iana-hardware:sensor");
-            setValue(session, parent, sensorPath + "/sensor-data/value",
+            setXpath(session, parent, sensorPath + "/class", "iana-hardware:sensor");
+            setXpath(session, parent, sensorPath + "/sensor-data/value",
                      std::to_string(sensor.value));
-            setValue(session, parent, sensorPath + "/sensor-data/value-type",
+            setXpath(session, parent, sensorPath + "/sensor-data/value-type",
                      Sensor::getValueTypeForModel(sensor.valueType));
-            setValue(session, parent, sensorPath + "/sensor-data/value-scale",
+            setXpath(session, parent, sensorPath + "/sensor-data/value-scale",
                      Sensor::getValueScaleString(sensor.valueScale));
-            setValue(session, parent, sensorPath + "/sensor-data/value-precision",
+            setXpath(session, parent, sensorPath + "/sensor-data/value-precision",
                      std::to_string(sensor.valuePrecision));
-            setValue(session, parent, sensorPath + "/sensor-data/oper-status", "ok");
+            setXpath(session, parent, sensorPath + "/sensor-data/oper-status", "ok");
             if (sensor.valueScale == Sensor::ValueScale::units) {
-                setValue(session, parent, sensorPath + "/sensor-data/units-display",
+                setXpath(session, parent, sensorPath + "/sensor-data/units-display",
                          Sensor::getValueTypeForModel(sensor.valueType));
             } else {
                 std::string const unit = Sensor::getValueScaleString(sensor.valueScale) + " " +
                                          Sensor::getValueTypeForModel(sensor.valueType);
-                setValue(session, parent, sensorPath + "/sensor-data/units-display", unit);
+                setXpath(session, parent, sensorPath + "/sensor-data/units-display", unit);
             }
             char timeString[100];
             if (std::strftime(timeString, sizeof(timeString), "%FT%TZ",
                               std::localtime(&sensor.valueTimestamp))) {
-                setValue(session, parent, sensorPath + std::string("/sensor-data/value-timestamp"),
+                setXpath(session, parent, sensorPath + std::string("/sensor-data/value-timestamp"),
                          timeString);
             }
-            setValue(session, parent, sensorPath + std::string("/sensor-data/value-update-rate"),
+            setXpath(session, parent, sensorPath + std::string("/sensor-data/value-update-rate"),
                      "0");
         }
     }
 
-    static std::string parseAndSetComponent(S_Session& session,
-                                            S_Data_Node& parent,
-                                            std::string const& request_xpath,
-                                            Value const& parsee,
-                                            std::string const& parentName,
-                                            Value::ConstMemberIterator itr,
-                                            int32_t& parent_rel_pos) {
-        std::string name, componentPath;
+    static std::string
+    parseAndSetComponent(Value const& parsee,
+                         std::string const& parentName,
+                         Value::ConstMemberIterator itr,
+                         std::unordered_map<std::string, ComponentData>& hwComponents,
+                         int32_t& parent_rel_pos) {
+        std::string name;
         if (itr != parsee.MemberEnd()) {
             name = itr->value.GetString();
-            componentPath = request_xpath + "/component[name='" + name + "']";
         } else {
             // invalid entry, go to the next one
             return std::string();
@@ -177,30 +187,21 @@ struct Callback {
         // +--ro firmware-rev?     string
         if (name == "firmware" && !parentName.empty() &&
             (itr = parsee.FindMember("version")) != parsee.MemberEnd()) {
-            componentPath = request_xpath + "/component[name='" + parentName + "']";
-            setValue(session, parent, componentPath + "/firmware-rev", itr->value.GetString());
+            hwComponents[parentName].firmwareRev = itr->value.GetString();
             return std::string();
         }
 
         // Check if a node with the current name exists, if so rename the current one
-        libyang::S_Set nameSet = parent->find_path(componentPath.c_str());
-        if (nameSet && nameSet->size() != 0) {
+        if (hwComponents.find(name) != hwComponents.end()) {
             name = parentName + ":" + name;
-            componentPath = request_xpath + "/component[name='" + name + "']";
         }
+        hwComponents[name].name = name;
 
-        bool wasSet(true);
         // +--rw class             identityref
         if ((itr = parsee.FindMember("class")) != parsee.MemberEnd()) {
-            wasSet = setValue(session, parent, componentPath + "/class",
-                              toIANAclass(itr->value.GetString()));
+            hwComponents[name].classType = toIANAclass(itr->value.GetString());
         } else {
-            wasSet = setValue(session, parent, componentPath + "/class", "iana-hardware:unknown");
-        }
-
-        // If no node was set at this point, no need to continue, no further nodes can be set
-        if (!wasSet) {
-            return std::string();
+            hwComponents[name].classType = "iana-hardware:unknown";
         }
 
         // +--rw name              string
@@ -213,7 +214,7 @@ struct Callback {
         for (auto const& mapValue : getLSHWtoIETFmap()) {
             std::string const stringValue = mapValue.first;
             if ((itr = parsee.FindMember(stringValue.c_str())) != parsee.MemberEnd()) {
-                setValue(session, parent, componentPath + mapValue.second, itr->value.GetString());
+                hwComponents[name].setValueFromLSHWmap(stringValue, itr->value.GetString());
             }
         }
 
@@ -222,50 +223,41 @@ struct Callback {
         if ((itr = parsee.FindMember("configuration")) != parsee.MemberEnd()) {
             Value::ConstMemberIterator config_elem = itr->value.FindMember("uuid");
             if (config_elem != itr->value.MemberEnd()) {
-                setValue(session, parent, componentPath + "/uuid", config_elem->value.GetString());
+                hwComponents[name].uuid = config_elem->value.GetString();
             }
             if ((config_elem = itr->value.FindMember("driverversion")) != itr->value.MemberEnd()) {
-                setValue(session, parent, componentPath + "/software-rev",
-                         config_elem->value.GetString());
+                hwComponents[name].softwareRev = config_elem->value.GetString();
             }
             if ((config_elem = itr->value.FindMember("firmware")) != itr->value.MemberEnd()) {
-                setValue(session, parent, componentPath + "/firmware-rev",
-                         config_elem->value.GetString());
+                hwComponents[name].firmwareRev = config_elem->value.GetString();
             }
         }
 
         // +--rw parent?           -> ../../component/name
         // +--rw parent-rel-pos?   int32
         if (!parentName.empty()) {
-            setValue(session, parent, componentPath + "/parent", parentName);
-            setValue(session, parent, componentPath + "/parent-rel-pos",
-                     std::to_string(parent_rel_pos));
+            hwComponents[name].parentName = parentName;
+            hwComponents[name].parent_rel_pos = parent_rel_pos;
             parent_rel_pos++;
         }
         if ((itr = parsee.FindMember("children")) != parsee.MemberEnd()) {
-            std::vector<std::string> childList =
-                parseAndSetComponents(session, parent, request_xpath, itr->value.GetArray(), name);
-            // childlist to value
-            // +--ro contains-child*   -> ../../component/name
-            for (auto const& elem : childList) {
-                setValue(session, parent, componentPath + "/contains-child", elem);
-            }
+            hwComponents[name].children =
+                parseAndSetComponents(itr->value.GetArray(), hwComponents, name);
         }
+
         return name;
     }
 
-    static std::vector<std::string> parseAndSetComponents(S_Session& session,
-                                                          S_Data_Node& parent,
-                                                          std::string const& request_xpath,
-                                                          Value const& parsee,
-                                                          std::string const& parentName) {
+    static std::vector<std::string>
+    parseAndSetComponents(Value const& parsee,
+                          std::unordered_map<std::string, ComponentData>& hwComponents,
+                          std::string const& parentName) {
         std::vector<std::string> siblings;
         int32_t parent_rel_pos(0);
 
         if (!parsee.IsArray()) {
-            std::string name(parseAndSetComponent(session, parent, request_xpath, parsee,
-                                                  parentName, parsee.MemberBegin(),
-                                                  parent_rel_pos));
+            std::string name(parseAndSetComponent(parsee, parentName, parsee.MemberBegin(),
+                                                  hwComponents, parent_rel_pos));
             if (!name.empty()) {
                 siblings.emplace_back(name);
             }
@@ -274,8 +266,8 @@ struct Callback {
 
         for (auto& m : parsee.GetArray()) {
             Value::ConstMemberIterator itr = m.FindMember("id");
-            std::string name(parseAndSetComponent(session, parent, request_xpath, m, parentName,
-                                                  itr, parent_rel_pos));
+            std::string name(
+                parseAndSetComponent(m, parentName, itr, hwComponents, parent_rel_pos));
             if (!name.empty()) {
                 siblings.emplace_back(name);
             }
@@ -296,27 +288,6 @@ struct Callback {
         } catch (const std::exception& e) {
             logMessage(SR_LL_WRN, e.what());
         }
-    }
-
-    static bool setValue(S_Session& session,
-                         S_Data_Node& parent,
-                         std::string const& node_xpath,
-                         std::string const& value) {
-        try {
-            S_Context ctx = session->get_context();
-            if (parent) {
-                parent->new_path(ctx, node_xpath.c_str(), value.c_str(), LYD_ANYDATA_CONSTSTRING,
-                                 0);
-            } else {
-                parent = std::make_shared<Data_Node>(ctx, node_xpath.c_str(), value.c_str(),
-                                                     LYD_ANYDATA_CONSTSTRING, 0);
-            }
-        } catch (std::runtime_error const& e) {
-            logMessage(SR_LL_WRN,
-                       "At path " + node_xpath + ", value " + value + " " + ", error: " + e.what());
-            return false;
-        }
-        return true;
     }
 
     static std::unordered_map<std::string, std::string> const& getLSHWtoIETFmap() {

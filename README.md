@@ -24,7 +24,7 @@ ninja -C ./build
 Meson installs the shared-library in the `{prefix}` and the .yang files necessary for the plugin functionality under {prefix}/yang
 
 ```bash
-meson install -C ./build
+ninja install -C ./build
 ```
 
 ## Running and testing the plugin
