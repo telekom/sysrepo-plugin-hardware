@@ -30,21 +30,21 @@
 namespace hardware {
 
 struct Callback {
-    using S_Data_Node = libyang::S_Data_Node;
-    using S_Context = libyang::S_Context;
-    using Data_Node = libyang::Data_Node;
     using S_Session = sysrepo::S_Session;
     using Value = rapidjson::Value;
     using Document = rapidjson::Document;
     using IStreamWrapper = rapidjson::IStreamWrapper;
-    using ComponentMap = std::unordered_map<std::string, ComponentData>;
 
     static int configurationCallback([[maybe_unused]] S_Session session,
                                      char const* module_name,
-                                     [[maybe_unused]] char const* xpath,
-                                     sr_event_t event,
+                                     char const* /* xpath */,
+                                     sr_event_t /* event */,
                                      uint32_t /* request_id */) {
-        printCurrentConfig(session, module_name);
+        ComponentData::populateConfigData(session, module_name);
+        for (auto const& comp : ComponentData::hwConfigData) {
+            comp.second->printExistingData();
+        }
+
         return SR_ERR_OK;
     }
 
@@ -99,28 +99,19 @@ struct Callback {
 
         parseAndSetComponents(doc, hwComponents, std::string());
 
-        if (filteredName.empty()) {
-            for (auto const& c : hwComponents) {
-                c.second.setXpathForAllMembers(session, parent, set_xpath);
-            }
-        } else if (hwComponents.find(filteredName) != hwComponents.end()) {
-            hwComponents[filteredName].setXpathForAllMembers(session, parent, set_xpath);
-            return SR_ERR_OK;
-        }
-
         try {
             HardwareSensors hwsens;
-            std::vector<Sensor> sensors = hwsens.parseSensorData();
-            for (auto const& s : sensors) {
-                if (filteredName.empty()) {
-                    s.setXpathForAllMembers(session, parent, set_xpath);
-                } else if (s.name == filteredName) {
-                    s.setXpathForAllMembers(session, parent, set_xpath);
-                    return SR_ERR_OK;
-                }
-            }
+            hwsens.parseSensorData(hwComponents);
         } catch (std::exception const& e) {
             logMessage(SR_LL_WRN, "hardware-sensors nodes failure: " + std::string(e.what()));
+        }
+
+        if (filteredName.empty()) {
+            for (auto const& c : hwComponents) {
+                c.second->setXpathForAllMembers(session, parent, set_xpath);
+            }
+        } else if (hwComponents.find(filteredName) != hwComponents.end()) {
+            hwComponents[filteredName]->setXpathForAllMembers(session, parent, set_xpath);
         }
 
         if (!parent) {
@@ -160,7 +151,9 @@ struct Callback {
         // +--ro firmware-rev?     string
         if (name == "firmware" && !parentName.empty() &&
             (itr = parsee.FindMember("version")) != parsee.MemberEnd()) {
-            hwComponents[parentName].firmwareRev = itr->value.GetString();
+            if (hwComponents.find(parentName) != hwComponents.end() && hwComponents[parentName]) {
+                hwComponents[parentName]->firmwareRev = itr->value.GetString();
+            }
             return std::string();
         }
 
@@ -168,13 +161,12 @@ struct Callback {
         if (hwComponents.find(name) != hwComponents.end()) {
             name = parentName + ":" + name;
         }
-        hwComponents[name].name = name;
+
+        hwComponents.insert(std::make_pair(name, std::make_shared<ComponentData>(name)));
 
         // +--rw class             identityref
         if ((itr = parsee.FindMember("class")) != parsee.MemberEnd()) {
-            hwComponents[name].classType = toIANAclass(itr->value.GetString());
-        } else {
-            hwComponents[name].classType = "iana-hardware:unknown";
+            hwComponents[name]->classType = toIANAclass(itr->value.GetString());
         }
 
         // +--rw name              string
@@ -187,7 +179,7 @@ struct Callback {
         for (auto const& mapValue : getLSHWtoIETFmap()) {
             std::string const stringValue = mapValue.first;
             if ((itr = parsee.FindMember(stringValue.c_str())) != parsee.MemberEnd()) {
-                hwComponents[name].setValueFromLSHWmap(stringValue, itr->value.GetString());
+                hwComponents[name]->setValueFromLSHWmap(stringValue, itr->value.GetString());
             }
         }
 
@@ -196,25 +188,26 @@ struct Callback {
         if ((itr = parsee.FindMember("configuration")) != parsee.MemberEnd()) {
             Value::ConstMemberIterator config_elem = itr->value.FindMember("uuid");
             if (config_elem != itr->value.MemberEnd()) {
-                hwComponents[name].uuid = config_elem->value.GetString();
+                hwComponents[name]->uuid = config_elem->value.GetString();
             }
             if ((config_elem = itr->value.FindMember("driverversion")) != itr->value.MemberEnd()) {
-                hwComponents[name].softwareRev = config_elem->value.GetString();
+                hwComponents[name]->softwareRev = config_elem->value.GetString();
             }
             if ((config_elem = itr->value.FindMember("firmware")) != itr->value.MemberEnd()) {
-                hwComponents[name].firmwareRev = config_elem->value.GetString();
+                hwComponents[name]->firmwareRev = config_elem->value.GetString();
             }
         }
 
         // +--rw parent?           -> ../../component/name
         // +--rw parent-rel-pos?   int32
         if (!parentName.empty()) {
-            hwComponents[name].parentName = parentName;
-            hwComponents[name].parent_rel_pos = parent_rel_pos;
+            hwComponents[name]->parentName = parentName;
+            hwComponents[name]->parent_rel_pos = parent_rel_pos;
             parent_rel_pos++;
         }
+        // +--ro contains-child*   -> ../../component/name
         if ((itr = parsee.FindMember("children")) != parsee.MemberEnd()) {
-            hwComponents[name].children =
+            hwComponents[name]->children =
                 parseAndSetComponents(itr->value.GetArray(), hwComponents, name);
         }
 

@@ -1,10 +1,18 @@
 <hardware xmlns="urn:ietf:params:xml:ns:yang:ietf-hardware">
     <component>
-        <name>test1</name>
+        <name>core</name>
         <class xmlns:iana-hardware="urn:ietf:params:xml:ns:yang:iana-hardware">iana-hardware:unknown</class>
+        <uri>Test-URI1</uri>
+        <uri>Test-URI2</uri>
+        <parent>ubuntu55hppv2</parent>
+        <parent-rel-pos>0</parent-rel-pos>
+        <asset-id>Test-Asset1</asset-id>
     </component>
     <component>
-        <name>test2</name>
-        <class xmlns:iana-hardware="urn:ietf:params:xml:ns:yang:iana-hardware">iana-hardware:unknown</class>
+        <name>cpu</name>
+        <class xmlns:iana-hardware="urn:ietf:params:xml:ns:yang:iana-hardware">iana-hardware:cpu</class>
+        <parent>core</parent>
+        <parent-rel-pos>4</parent-rel-pos>
+        <alias>Test-Alias1</alias>
     </component>
 </hardware>

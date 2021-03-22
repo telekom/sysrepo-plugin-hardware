@@ -18,6 +18,7 @@
 #ifndef SENSOR_DATA_H
 #define SENSOR_DATA_H
 
+#include <component_data.h>
 #include <utils/globals.h>
 
 #include <sensors/sensors.h>
@@ -36,11 +37,11 @@ struct SensorsInitFail : public std::exception {
 
 namespace hardware {
 
-struct Sensor {
+struct Sensor : public ComponentData {
 
     Sensor(std::string const& sensorName)
-        : name(sensorName), value(0), valueType(ValueType::unknown), valueScale(ValueScale::units),
-          valuePrecision(0),
+        : ComponentData(sensorName, "iana-hardware:sensor"), value(0),
+          valueType(ValueType::unknown), valueScale(ValueScale::units), valuePrecision(0),
           valueTimestamp(std::chrono::system_clock::to_time_t(std::chrono::system_clock::now())){};
 
     enum class ValueType {
@@ -109,9 +110,10 @@ struct Sensor {
 
     void setXpathForAllMembers(sysrepo::S_Session& session,
                                libyang::S_Data_Node& parent,
-                               std::string const& mainXpath) const {
+                               std::string const& mainXpath) const override {
         std::string sensorPath = mainXpath + "/component[name='" + name + "']";
-        setXpath(session, parent, sensorPath + "/class", "iana-hardware:sensor");
+        logMessage(SR_LL_DBG, "Setting values for component: " + name);
+        setXpath(session, parent, sensorPath + "/class", classType);
         setXpath(session, parent, sensorPath + "/sensor-data/value", std::to_string(value));
         setXpath(session, parent, sensorPath + "/sensor-data/value-type",
                  getValueTypeString(valueType));
@@ -165,7 +167,6 @@ struct Sensor {
         }
     }
 
-    std::string name;
     int32_t value;
     ValueType valueType;
     ValueScale valueScale;
@@ -185,7 +186,7 @@ struct HardwareSensors {
         sensors_cleanup();
     }
 
-    std::vector<Sensor> parseSensorData() {
+    std::vector<Sensor> parseSensorData(ComponentMap& hwComponents) {
         std::vector<Sensor> sensors;
         sensors_chip_name const* cn = nullptr;
         int c = 0;
@@ -233,6 +234,8 @@ struct HardwareSensors {
                     break;
                 }
                 if (result) {
+                    hwComponents.insert(
+                        std::make_pair(tempSensor.name, std::make_shared<Sensor>(tempSensor)));
                     sensors.emplace_back(tempSensor);
                 }
             }
