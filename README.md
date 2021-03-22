@@ -7,7 +7,7 @@ A sysrepo plugin for the IETF-Hardware YANG module [RFC8348](https://tools.ietf.
 The plugin is built as a shared library using the [MESON build system](https://mesonbuild.com/) and is required for building the plugin.
 
 ```bash
-apt install meson ninja-build cmake
+apt install meson ninja-build cmake pkg-config
 ```
 
 The plugin install location is the `{prefix}` folder, the `libietf-hardware-plugin.so` should be copied over to the `plugins` folder from the sysrepo installation\
@@ -21,10 +21,12 @@ ninja -C ./build
 
 ## Installing
 
-Meson installs the shared-library in the `{prefix}` and the .yang files necessary for the plugin functionality under {prefix}/yang
+Meson installs the shared-library in the `{prefix}` and the .yang files necessary for the plugin functionality under `{prefix}/yang`
 
 ```bash
 ninja install -C ./build
+mkdir -p /opt/sysrepo/lib/sysrepo/plugins
+cp /opt/dt-ietf-hardware/libietf-hardware-plugin.so /opt/sysrepo/lib/sysrepo/plugins
 ```
 
 ## Running and testing the plugin
@@ -42,7 +44,7 @@ The sysrepo plugin daemon needs to be loaded after the plugin is installed
 sysrepo-plugind -v 4 -d
 ```
 
-The functionality can be tested doing an operational data request through sysrepo, only the root-node is currently supported for data-requests:
+The functionality can be tested doing an operational data request through sysrepo; data requests should be made for the `hardware`, `component` nodes:
 
 ```bash
 sysrepocfg -x "/ietf-hardware:hardware" -X -d operational -f json
@@ -51,19 +53,15 @@ sysrepocfg -x "/ietf-hardware:hardware" -X -d operational -f json
 ### Dependencies
 ```
 libyang
-libsysrepo
-libsensors
-```
-
-```bash
-sudo apt install lm-sensors libsensors-dev
+sysrepo w/ sysrepo-cpp
+libsensors4-dev
+lm-sensors
 ```
 
 ### Nodes that are currently implemented
 DONE - nodes are implemented and a value is provided if such information can be retrieved\
 NA - node is not implemented because the value can't be found in Debian systems\
-IN PROGRESS - values can be partly available\
-NOT IMPLEMENTED - values are not yet provided, could be in the future
+IN PROGRESS - values can be partly available
 
 ```
 module: ietf-hardware
@@ -89,7 +87,7 @@ module: ietf-hardware
         +--ro mfg-date?         yang:date-and-time                    NA
         +--rw uri*              inet:uri                              NA
         +--ro uuid?             yang:uuid                             DONE
-        +--rw state {hardware-state}?                                 NOT IMPLEMENTED
+        +--rw state {hardware-state}?                                 NA
         |  +--ro state-last-changed?   yang:date-and-time
         |  +--rw admin-state?          admin-state
         |  +--ro oper-state?           oper-state
@@ -106,7 +104,7 @@ module: ietf-hardware
            +--ro value-timestamp?     yang:date-and-time              DONE
            +--ro value-update-rate?   uint32                          DONE
 
-  notifications:                                                      NOT IMPLEMENTED
+  notifications:                                                      NA
     +---n hardware-state-change
     +---n hardware-state-oper-enabled {hardware-state}?
     |  +--ro name?          -> /hardware/component/name
