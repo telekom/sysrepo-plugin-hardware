@@ -186,8 +186,7 @@ struct HardwareSensors {
         sensors_cleanup();
     }
 
-    std::vector<Sensor> parseSensorData(ComponentMap& hwComponents) {
-        std::vector<Sensor> sensors;
+    void parseSensorData(ComponentMap& hwComponents) {
         sensors_chip_name const* cn = nullptr;
         int c = 0;
         while ((cn = sensors_get_detected_chips(0, &c))) {
@@ -234,13 +233,11 @@ struct HardwareSensors {
                     break;
                 }
                 if (result) {
-                    hwComponents.insert(
-                        std::make_pair(tempSensor.name, std::make_shared<Sensor>(tempSensor)));
-                    sensors.emplace_back(tempSensor);
+                    hwComponents.emplace(std::string(tempSensor.name),
+                                         std::make_shared<Sensor>(tempSensor));
                 }
             }
         }
-        return sensors;
     }
 };
 

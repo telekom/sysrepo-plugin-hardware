@@ -40,10 +40,8 @@ struct Callback {
                                      char const* /* xpath */,
                                      sr_event_t /* event */,
                                      uint32_t /* request_id */) {
+        printCurrentConfig(session, module_name);
         ComponentData::populateConfigData(session, module_name);
-        for (auto const& comp : ComponentData::hwConfigData) {
-            comp.second->printExistingData();
-        }
 
         return SR_ERR_OK;
     }
@@ -115,6 +113,7 @@ struct Callback {
         }
 
         if (!parent) {
+            logMessage(SR_LL_ERR, "No nodes were set");
             return SR_ERR_CALLBACK_FAILED;
         }
         return SR_ERR_OK;
@@ -139,9 +138,9 @@ struct Callback {
                                             Value::ConstMemberIterator itr,
                                             ComponentMap& hwComponents,
                                             int32_t& parent_rel_pos) {
-        std::string name;
+        std::shared_ptr<ComponentData> component;
         if (itr != parsee.MemberEnd()) {
-            name = itr->value.GetString();
+            component = std::make_shared<ComponentData>(itr->value.GetString());
         } else {
             // invalid entry, go to the next one
             return std::string();
@@ -149,7 +148,7 @@ struct Callback {
 
         // firmware node, skip this one and set the parent's firmware-rev
         // +--ro firmware-rev?     string
-        if (name == "firmware" && !parentName.empty() &&
+        if (component->name == "firmware" && !parentName.empty() &&
             (itr = parsee.FindMember("version")) != parsee.MemberEnd()) {
             if (hwComponents.find(parentName) != hwComponents.end() && hwComponents[parentName]) {
                 hwComponents[parentName]->firmwareRev = itr->value.GetString();
@@ -158,15 +157,13 @@ struct Callback {
         }
 
         // Check if a node with the current name exists, if so rename the current one
-        if (hwComponents.find(name) != hwComponents.end()) {
-            name = parentName + ":" + name;
+        if (hwComponents.find(component->name) != hwComponents.end()) {
+            component->name = parentName + ":" + component->name;
         }
-
-        hwComponents.insert(std::make_pair(name, std::make_shared<ComponentData>(name)));
 
         // +--rw class             identityref
         if ((itr = parsee.FindMember("class")) != parsee.MemberEnd()) {
-            hwComponents[name]->classType = toIANAclass(itr->value.GetString());
+            component->classType = toIANAclass(itr->value.GetString());
         }
 
         // +--rw name              string
@@ -179,7 +176,7 @@ struct Callback {
         for (auto const& mapValue : getLSHWtoIETFmap()) {
             std::string const stringValue = mapValue.first;
             if ((itr = parsee.FindMember(stringValue.c_str())) != parsee.MemberEnd()) {
-                hwComponents[name]->setValueFromLSHWmap(stringValue, itr->value.GetString());
+                component->setValueFromLSHWmap(stringValue, itr->value.GetString());
             }
         }
 
@@ -188,43 +185,53 @@ struct Callback {
         if ((itr = parsee.FindMember("configuration")) != parsee.MemberEnd()) {
             Value::ConstMemberIterator config_elem = itr->value.FindMember("uuid");
             if (config_elem != itr->value.MemberEnd()) {
-                hwComponents[name]->uuid = config_elem->value.GetString();
+                component->uuid = config_elem->value.GetString();
             }
             if ((config_elem = itr->value.FindMember("driverversion")) != itr->value.MemberEnd()) {
-                hwComponents[name]->softwareRev = config_elem->value.GetString();
+                component->softwareRev = config_elem->value.GetString();
             }
             if ((config_elem = itr->value.FindMember("firmware")) != itr->value.MemberEnd()) {
-                hwComponents[name]->firmwareRev = config_elem->value.GetString();
+                component->firmwareRev = config_elem->value.GetString();
             }
         }
 
         // +--rw parent?           -> ../../component/name
         // +--rw parent-rel-pos?   int32
         if (!parentName.empty()) {
-            hwComponents[name]->parentName = parentName;
-            hwComponents[name]->parent_rel_pos = parent_rel_pos;
+            component->parentName = parentName;
+            component->parent_rel_pos = parent_rel_pos;
             parent_rel_pos++;
         }
-        // +--ro contains-child*   -> ../../component/name
-        if ((itr = parsee.FindMember("children")) != parsee.MemberEnd()) {
-            hwComponents[name]->children =
-                parseAndSetComponents(itr->value.GetArray(), hwComponents, name);
+
+        // Filter parsed component through configuration values
+        for (auto const& [configName, configData] : ComponentData::hwConfigData) {
+            if (configData && component->checkForConfigMatch(configData)) {
+                component->replaceWritableValues(configData);
+            }
         }
 
-        return name;
+        hwComponents.insert(std::make_pair(component->name, component));
+
+        // +--ro contains-child*   -> ../../component/name
+        if ((itr = parsee.FindMember("children")) != parsee.MemberEnd()) {
+            hwComponents[component->name]->children =
+                parseAndSetComponents(itr->value.GetArray(), hwComponents, component->name);
+        }
+
+        return component->name;
     }
 
-    static std::vector<std::string> parseAndSetComponents(Value const& parsee,
-                                                          ComponentMap& hwComponents,
-                                                          std::string const& parentName) {
-        std::vector<std::string> siblings;
+    static std::set<std::string> parseAndSetComponents(Value const& parsee,
+                                                       ComponentMap& hwComponents,
+                                                       std::string const& parentName) {
+        std::set<std::string> siblings;
         int32_t parent_rel_pos(0);
 
         if (!parsee.IsArray()) {
             std::string name(parseAndSetComponent(parsee, parentName, parsee.MemberBegin(),
                                                   hwComponents, parent_rel_pos));
             if (!name.empty()) {
-                siblings.emplace_back(name);
+                siblings.emplace(name);
             }
             return siblings;
         }
@@ -234,7 +241,7 @@ struct Callback {
             std::string name(
                 parseAndSetComponent(m, parentName, itr, hwComponents, parent_rel_pos));
             if (!name.empty()) {
-                siblings.emplace_back(name);
+                siblings.emplace(name);
             }
         }
         return siblings;

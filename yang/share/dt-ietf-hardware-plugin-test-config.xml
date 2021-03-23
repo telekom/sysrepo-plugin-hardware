@@ -4,15 +4,20 @@
         <class xmlns:iana-hardware="urn:ietf:params:xml:ns:yang:iana-hardware">iana-hardware:unknown</class>
         <uri>Test-URI1</uri>
         <uri>Test-URI2</uri>
-        <parent>ubuntu55hppv2</parent>
+        <parent>ubuntu-55hppv2</parent>
         <parent-rel-pos>0</parent-rel-pos>
         <asset-id>Test-Asset1</asset-id>
     </component>
     <component>
-        <name>cpu</name>
+        <name>renamed-cpu</name>
         <class xmlns:iana-hardware="urn:ietf:params:xml:ns:yang:iana-hardware">iana-hardware:cpu</class>
         <parent>core</parent>
         <parent-rel-pos>4</parent-rel-pos>
+        <alias>Test-Alias1</alias>
+    </component>
+    <component>
+        <name>memory</name>
+        <class xmlns:iana-hardware="urn:ietf:params:xml:ns:yang:iana-hardware">iana-hardware:unknown</class>
         <alias>Test-Alias1</alias>
     </component>
 </hardware>

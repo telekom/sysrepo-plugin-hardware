@@ -82,10 +82,10 @@ module: ietf-hardware
         +--ro mfg-name?         string                                DONE
         +--ro model-name?       string                                DONE
         +--rw alias?            string                                DONE
-        +--rw asset-id?         string                                NA
+        +--rw asset-id?         string                                DONE (only configuration side)
         +--ro is-fru?           boolean                               NA
         +--ro mfg-date?         yang:date-and-time                    NA
-        +--rw uri*              inet:uri                              NA
+        +--rw uri*              inet:uri                              DONE (only configuration side)
         +--ro uuid?             yang:uuid                             DONE
         +--rw state {hardware-state}?                                 NA
         |  +--ro state-last-changed?   yang:date-and-time

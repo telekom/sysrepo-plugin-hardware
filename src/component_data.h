@@ -24,9 +24,9 @@
 #include <iostream>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <unordered_map>
-#include <vector>
 
 namespace hardware {
 
@@ -194,6 +194,24 @@ struct ComponentData {
         std::cout << std::endl;
     }
 
+    bool checkForConfigMatch(std::shared_ptr<ComponentData> component) {
+        // We can't compare optionals w/o checking if values are present because of the following
+        // supposition: lhs is considered equal to rhs if, and only if, both lhs and rhs do not
+        // contain a value. Given this we can't have nodes with no 'parents' be considered equal.
+        if (component->parentName && component->parent_rel_pos && parentName && parent_rel_pos) {
+            return (component->classType == classType) && (component->parentName == parentName) &&
+                   (component->parent_rel_pos == parent_rel_pos);
+        }
+        return false;
+    }
+
+    void replaceWritableValues(std::shared_ptr<ComponentData> component) {
+        name = component->name;
+        alias = component->alias;
+        assetID = component->assetID;
+        uri = component->uri;
+    }
+
     static void populateConfigData(sysrepo::S_Session& session, char const* module_name) {
         std::string const data_xpath(std::string("/") + module_name + ":hardware");
         S_Data_Node toplevel(session->get_data(data_xpath.c_str()));
@@ -211,25 +229,28 @@ struct ComponentData {
                         name = leaf.value_str();
                         hwConfigData.insert(
                             std::make_pair(name, std::make_shared<ComponentData>(name)));
-                    } else if (std::string(sleaf.name()) == "class") {
-                        hwConfigData[name]->classType = leaf.value_str();
-                    } else if (std::string(sleaf.name()) == "parent") {
-                        hwConfigData[name]->parentName = leaf.value_str();
-                    } else if (std::string(sleaf.name()) == "parent-rel-pos") {
-                        hwConfigData[name]->parent_rel_pos = leaf.value()->int32();
-                    } else if (std::string(sleaf.name()) == "alias") {
-                        hwConfigData[name]->alias = leaf.value_str();
-                    } else if (std::string(sleaf.name()) == "asset-id") {
-                        hwConfigData[name]->assetID = leaf.value_str();
-                    } else if (std::string(sleaf.name()) == "uri") {
+                    } else if (hwConfigData.find(name) != hwConfigData.end() &&
+                               hwConfigData[name]) {
+                        if (std::string(sleaf.name()) == "class") {
+                            hwConfigData[name]->classType = leaf.value_str();
+                        } else if (std::string(sleaf.name()) == "parent") {
+                            hwConfigData[name]->parentName = leaf.value_str();
+                        } else if (std::string(sleaf.name()) == "parent-rel-pos") {
+                            hwConfigData[name]->parent_rel_pos = leaf.value()->int32();
+                        } else if (std::string(sleaf.name()) == "alias") {
+                            hwConfigData[name]->alias = leaf.value_str();
+                        } else if (std::string(sleaf.name()) == "asset-id") {
+                            hwConfigData[name]->assetID = leaf.value_str();
+                        }
                     }
                     break;
                 }
                 case LYS_LEAFLIST: {
                     Data_Node_Leaf_List leaflist(node);
                     Schema_Node_Leaflist sleaf(schema);
-                    if (std::string(sleaf.name()) == "uri") {
-                        hwConfigData[name]->uri.push_back(leaflist.value_str());
+                    if (hwConfigData.find(name) != hwConfigData.end() && hwConfigData[name] &&
+                        std::string(sleaf.name()) == "uri") {
+                        hwConfigData[name]->uri.emplace(leaflist.value_str());
                     }
                     break;
                 }
@@ -247,7 +268,7 @@ struct ComponentData {
     std::optional<std::string> description;
     std::optional<std::string> parentName;
     std::optional<int32_t> parent_rel_pos;
-    std::vector<std::string> children;
+    std::set<std::string> children;
     std::optional<std::string> hardwareRev;
     std::optional<std::string> firmwareRev;
     std::optional<std::string> softwareRev;
@@ -257,7 +278,7 @@ struct ComponentData {
     std::optional<std::string> alias;
     std::optional<std::string> assetID;
     std::optional<std::string> uuid;
-    std::vector<std::string> uri;
+    std::set<std::string> uri;
 
     static ComponentMap hwConfigData;
 };
