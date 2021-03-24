@@ -18,6 +18,6 @@
     <component>
         <name>memory</name>
         <class xmlns:iana-hardware="urn:ietf:params:xml:ns:yang:iana-hardware">iana-hardware:unknown</class>
-        <alias>Test-Alias1</alias>
+        <alias>Test-Alias</alias>
     </component>
 </hardware>

@@ -80,8 +80,6 @@ struct Callback {
             setXpath(session, parent, set_xpath + "/last-change", timeString);
         }
 
-        ComponentMap hwComponents;
-
         std::ifstream ifs(COMPONENTS_LOCATION, std::ifstream::in);
         if (ifs.fail()) {
             logMessage(SR_LL_ERR, "Can't open: " COMPONENTS_LOCATION);
@@ -95,6 +93,7 @@ struct Callback {
             return SR_ERR_CALLBACK_FAILED;
         }
 
+        ComponentMap hwComponents;
         parseAndSetComponents(doc, hwComponents, std::string());
 
         try {
@@ -205,6 +204,7 @@ struct Callback {
 
         // Filter parsed component through configuration values
         for (auto const& [configName, configData] : ComponentData::hwConfigData) {
+            std::ignore = configName;
             if (configData && component->checkForConfigMatch(configData)) {
                 component->replaceWritableValues(configData);
             }

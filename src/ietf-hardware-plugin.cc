@@ -31,10 +31,10 @@ using sysrepo::Subscribe;
 struct HardwareModel {
     S_Subscribe subscription;
     S_Session sess;
-    static std::string moduleName;
+    static std::string const moduleName;
 };
 
-std::string HardwareModel::moduleName = "ietf-hardware";
+std::string const HardwareModel::moduleName = "ietf-hardware";
 
 static HardwareModel theModel;
 
@@ -59,5 +59,7 @@ int sr_plugin_init_cb(sr_session_ctx_t* session, void** /*private_data*/) {
 }
 
 void sr_plugin_cleanup_cb(sr_session_ctx_t* /*session*/, void* /*private_data*/) {
+    theModel.subscription.reset();
+    theModel.sess.reset();
     logMessage(SR_LL_DBG, "plugin cleanup finished.");
 }

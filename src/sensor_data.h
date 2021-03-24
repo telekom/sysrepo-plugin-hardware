@@ -151,8 +151,8 @@ struct Sensor : public ComponentData {
         if (subf->flags & SENSORS_MODE_R) {
             int rc = sensors_get_value(cn, subf->number, &val);
             if (rc < 0) {
-                logMessage(SR_LL_WRN,
-                           std::string("setValueFromSubfeature(): ") + std::to_string(rc));
+                logMessage(SR_LL_WRN, std::string("Couldn't get sensor value. Error code: ") +
+                                          std::to_string(rc));
                 return false;
             } else {
                 logMessage(SR_LL_DBG, std::string("Got sensor: ") + cn->prefix + "/" +
