@@ -194,6 +194,11 @@ struct Callback {
             }
         }
 
+        // +--ro physical-index?   int32 {entity-mib}?
+        if ((itr = parsee.FindMember("physid")) != parsee.MemberEnd()) {
+            component->parseAndSetPhysicalID(itr->value.GetString());
+        }
+
         // +--rw parent?           -> ../../component/name
         // +--rw parent-rel-pos?   int32
         if (!parentName.empty()) {
@@ -203,8 +208,7 @@ struct Callback {
         }
 
         // Filter parsed component through configuration values
-        for (auto const& [configName, configData] : ComponentData::hwConfigData) {
-            std::ignore = configName;
+        for (auto const& configData : ComponentData::hwConfigData) {
             if (configData && component->checkForConfigMatch(configData)) {
                 component->replaceWritableValues(configData);
             }
@@ -221,27 +225,27 @@ struct Callback {
         return component->name;
     }
 
-    static std::set<std::string> parseAndSetComponents(Value const& parsee,
-                                                       ComponentMap& hwComponents,
-                                                       std::string const& parentName) {
-        std::set<std::string> siblings;
+    static std::list<std::string> parseAndSetComponents(Value const& parsee,
+                                                        ComponentMap& hwComponents,
+                                                        std::string const& parentName) {
+        std::list<std::string> siblings;
         int32_t parent_rel_pos(0);
 
         if (!parsee.IsArray()) {
-            std::string name(parseAndSetComponent(parsee, parentName, parsee.MemberBegin(),
-                                                  hwComponents, parent_rel_pos));
+            std::string const name(parseAndSetComponent(parsee, parentName, parsee.MemberBegin(),
+                                                        hwComponents, parent_rel_pos));
             if (!name.empty()) {
-                siblings.emplace(name);
+                siblings.emplace_back(name);
             }
             return siblings;
         }
 
         for (auto& m : parsee.GetArray()) {
             Value::ConstMemberIterator itr = m.FindMember("id");
-            std::string name(
+            std::string const name(
                 parseAndSetComponent(m, parentName, itr, hwComponents, parent_rel_pos));
             if (!name.empty()) {
-                siblings.emplace(name);
+                siblings.emplace_back(name);
             }
         }
         return siblings;

@@ -22,9 +22,9 @@
 #include <utils/globals.h>
 
 #include <iostream>
+#include <list>
 #include <memory>
 #include <optional>
-#include <set>
 #include <string>
 #include <unordered_map>
 
@@ -41,6 +41,7 @@ using libyang::Schema_Node_Leaflist;
 struct ComponentData;
 
 using ComponentMap = std::unordered_map<std::string, std::shared_ptr<ComponentData>>;
+using ComponentList = std::list<std::shared_ptr<ComponentData>>;
 
 struct ComponentData {
 
@@ -57,6 +58,7 @@ struct ComponentData {
         logMessage(SR_LL_DBG, "Setting values for component: " + name);
         // +--rw name              string
         // +--rw class             identityref
+        // +--ro physical-index?   int32 {entity-mib}?
         // +--ro description?      string
         // +--rw parent?           -> ../../component/name
         // +--rw parent-rel-pos?   int32
@@ -75,6 +77,10 @@ struct ComponentData {
 
         if (description) {
             setXpath(session, parent, componentPath + "/description", description.value());
+        }
+        if (physicalID && parent && parent->node_module()->feature_state("entity-mib") == 1) {
+            setXpath(session, parent, componentPath + "/physical-index",
+                     std::to_string(physicalID.value()));
         }
         if (parentName) {
             setXpath(session, parent, componentPath + "/parent", parentName.value());
@@ -212,10 +218,25 @@ struct ComponentData {
         uri = component->uri;
     }
 
+    void parseAndSetPhysicalID(std::string physid) {
+        size_t foundPos = physid.find('.');
+        if (foundPos != std::string::npos) {
+            physid = physid.substr(foundPos + 1, physid.length());
+        }
+        try {
+            physicalID = std::stoi(physid, nullptr, 16);
+            if (physicalID < 1) {
+                physicalID = std::nullopt;
+            }
+        } catch (std::exception const& e) {
+            logMessage(SR_LL_WRN, std::string("Couldn't convert physical-id: ") + e.what());
+        }
+    }
+
     static void populateConfigData(sysrepo::S_Session& session, char const* module_name) {
         std::string const data_xpath(std::string("/") + module_name + ":hardware");
         S_Data_Node toplevel(session->get_data(data_xpath.c_str()));
-        std::string name;
+        std::shared_ptr<ComponentData> component;
 
         hwConfigData.clear();
         for (S_Data_Node& root : toplevel->tree_for()) {
@@ -226,21 +247,19 @@ struct ComponentData {
                     Data_Node_Leaf_List leaf(node);
                     Schema_Node_Leaf sleaf(schema);
                     if (sleaf.is_key()) {
-                        name = leaf.value_str();
-                        hwConfigData.insert(
-                            std::make_pair(name, std::make_shared<ComponentData>(name)));
-                    } else if (hwConfigData.find(name) != hwConfigData.end() &&
-                               hwConfigData[name]) {
+                        component = std::make_shared<ComponentData>(leaf.value_str());
+                        hwConfigData.push_back(component);
+                    } else if (component) {
                         if (std::string(sleaf.name()) == "class") {
-                            hwConfigData[name]->classType = leaf.value_str();
+                            component->classType = leaf.value_str();
                         } else if (std::string(sleaf.name()) == "parent") {
-                            hwConfigData[name]->parentName = leaf.value_str();
+                            component->parentName = leaf.value_str();
                         } else if (std::string(sleaf.name()) == "parent-rel-pos") {
-                            hwConfigData[name]->parent_rel_pos = leaf.value()->int32();
+                            component->parent_rel_pos = leaf.value()->int32();
                         } else if (std::string(sleaf.name()) == "alias") {
-                            hwConfigData[name]->alias = leaf.value_str();
+                            component->alias = leaf.value_str();
                         } else if (std::string(sleaf.name()) == "asset-id") {
-                            hwConfigData[name]->assetID = leaf.value_str();
+                            component->assetID = leaf.value_str();
                         }
                     }
                     break;
@@ -248,9 +267,8 @@ struct ComponentData {
                 case LYS_LEAFLIST: {
                     Data_Node_Leaf_List leaflist(node);
                     Schema_Node_Leaflist sleaf(schema);
-                    if (hwConfigData.find(name) != hwConfigData.end() && hwConfigData[name] &&
-                        std::string(sleaf.name()) == "uri") {
-                        hwConfigData[name]->uri.emplace(leaflist.value_str());
+                    if (component && std::string(sleaf.name()) == "uri") {
+                        component->uri.emplace_back(leaflist.value_str());
                     }
                     break;
                 }
@@ -268,7 +286,7 @@ struct ComponentData {
     std::optional<std::string> description;
     std::optional<std::string> parentName;
     std::optional<int32_t> parent_rel_pos;
-    std::set<std::string> children;
+    std::list<std::string> children;
     std::optional<std::string> hardwareRev;
     std::optional<std::string> firmwareRev;
     std::optional<std::string> softwareRev;
@@ -278,12 +296,12 @@ struct ComponentData {
     std::optional<std::string> alias;
     std::optional<std::string> assetID;
     std::optional<std::string> uuid;
-    std::set<std::string> uri;
+    std::list<std::string> uri;
 
-    static ComponentMap hwConfigData;
+    static ComponentList hwConfigData;
 };
 
-ComponentMap ComponentData::hwConfigData;
+ComponentList ComponentData::hwConfigData;
 
 }  // namespace hardware
 
