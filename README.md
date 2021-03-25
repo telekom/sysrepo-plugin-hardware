@@ -21,7 +21,7 @@ ninja -C ./build
 
 ## Installing
 
-Meson installs the shared-library in the `{prefix}` and the .yang files necessary for the plugin functionality under `{prefix}/yang`
+Meson installs the shared-library in the `{prefix}` and the .yang files necessary for the plugin functionality under `{prefix}/yang`.
 
 ```bash
 ninja install -C ./build
@@ -35,33 +35,38 @@ The necessary .yang files need to be installed in sysrepo from `{prefix}/yang`:
 ```bash
 sysrepoctl -i /opt/dt-ietf-hardware/yang/iana-hardware.yang
 sysrepoctl -i /opt/dt-ietf-hardware/yang/ietf-hardware.yang
-sysrepoctl -c ietf-hardware -e hardware-sensor
+sysrepoctl -c ietf-hardware -e hardware-sensor -e entity-mib
 ```
 
-The sysrepo plugin daemon needs to be loaded after the plugin is installed
+The sysrepo plugin daemon needs to be loaded after the plugin is installed:
 
 ```bash
 sysrepo-plugind -v 4 -d
 ```
 
-The functionality can be tested doing an operational data request through sysrepo; data requests should be made for the `hardware`, `component` nodes:
+The functionality can be tested by doing an operational data request through sysrepo; data requests should be made for the `hardware`, `component` nodes:
 
 ```bash
 sysrepocfg -x "/ietf-hardware:hardware" -X -d operational -f json
 ```
 
+As described in the module itself the plugin holds configuration data provided by the user in the running data-store and uses the data according to the requirements of the RFC to change the hardware information provided in the operational data-store. A configuration example can be found under `yang/share` directory and can be imported in sysrepo using:
+
+```bash
+sysrepocfg -Idt-ietf-hardware-plugin-test-config.xml -d running
+```
+
 ### Dependencies
 ```
 libyang
-sysrepo w/ sysrepo-cpp
+sysrepo compiled with sysrepo-cpp
 libsensors4-dev
 lm-sensors
 ```
 
 ### Nodes that are currently implemented
 DONE - nodes are implemented and a value is provided if such information can be retrieved\
-NA - node is not implemented because the value can't be found in Debian systems\
-IN PROGRESS - values can be partly available
+NA - node is not implemented because the value can't be found in Debian systems
 
 ```
 module: ietf-hardware
@@ -70,7 +75,7 @@ module: ietf-hardware
      +--rw component* [name]                                          DONE
         +--rw name              string                                DONE
         +--rw class             identityref                           DONE
-        +--ro physical-index?   int32 {entity-mib}?                   NA (feature not available)
+        +--ro physical-index?   int32 {entity-mib}?                   DONE
         +--ro description?      string                                DONE
         +--rw parent?           -> ../../component/name               DONE
         +--rw parent-rel-pos?   int32                                 DONE
@@ -114,4 +119,31 @@ module: ietf-hardware
        +--ro name?          -> /hardware/component/name
        +--ro admin-state?   -> /hardware/component/state/admin-state
        +--ro alarm-state?   -> /hardware/component/state/alarm-state
+```
+
+### Assumptions made in the nodes value
+The plugin uses `lshw` as the go-to tool for hardware information gathering, it has an option to output in json format and in this manner the information is collected by parsing the lshw output. By doing so a wide set of correlations have been made between the tool's output and the IETF-Hardware nodes, below you can find a map summarizing them:
+
+```
+IETF-Hardware node                                                     LSHW json node
+----------------------------------------------------------------------------------------------------------------------
+name (changed to '{parent}:{name} on collision')                       id (non-unique)
+class (`unknown` where value isn't defined in IANA-Hardware)           class
+physical-index (converted to int32)                                    physid (hex)
+description                                                            description
+parent                                                                 deducted as ascendant of `children` node
+parent-rel-pos (increasing value, starting from 1)                     -
+contains-child                                                         children/id (for every child)
+hardware-rev                                                           version
+firmware-rev                                                           children/id[firmware] OR configuration/firmware
+software-rev                                                           configuration/driverversion
+serial-num                                                             serial
+mfg-name                                                               vendor
+model-name                                                             product
+alias                                                                  handle
+asset-id                                                               -
+is-fru                                                                 -
+mfg-date                                                               -
+uri                                                                    -
+uuid                                                                   configuration/uuid
 ```
