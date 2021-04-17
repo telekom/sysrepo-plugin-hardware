@@ -10,12 +10,12 @@ The plugin is built as a shared library using the [MESON build system](https://m
 apt install meson ninja-build cmake pkg-config
 ```
 
-The plugin install location is the `{prefix}` folder, the `libietf-hardware-plugin.so` should be copied over to the `plugins` folder from the sysrepo installation\
+The plugin install location is the `{prefix}` folder, the `libietf-hardware-plugin.so` should be installed over to the `plugins` folder from the sysrepo installation (e.g. the sysrepo install location for the bash commands below is `/opt/sysrepo`)\
 Build by making a build directory (i.e. build/), run meson in that dir, and then use ninja to build the desired target.
 
 ```bash
-mkdir /opt/dt-ietf-hardware
-meson -D prefix="/opt/dt-ietf-hardware" ./build
+mkdir -p /opt/sysrepo/lib/sysrepo/plugins
+meson --prefix="/opt/sysrepo/lib/sysrepo/plugins" ./build
 ninja -C ./build
 ```
 
@@ -25,8 +25,6 @@ Meson installs the shared-library in the `{prefix}` and the .yang files necessar
 
 ```bash
 ninja install -C ./build
-mkdir -p /opt/sysrepo/lib/sysrepo/plugins
-cp /opt/dt-ietf-hardware/libietf-hardware-plugin.so /opt/sysrepo/lib/sysrepo/plugins
 ```
 
 ## Running and testing the plugin
@@ -147,3 +145,8 @@ mfg-date                                                               -
 uri                                                                    -
 uuid                                                                   configuration/uuid
 ```
+
+### Parent-rel-pos node implementation decision
+In this implementation the `parent-rel-pos` is an increasing unsigned integer starting from 1.
+* First of all this has been done considering that in modern Debian systems the old classes contained in iana-hardware do not map to real environments and most of the time the class of a component is `unknown` which in turn creates many sibling nodes and identifying a slot/handle ordering between such devices can be quite tricky and for the most part useless. For example consider having a PCI bus node that has as children the pci controller and the usb controller: pci:0, pci:1, pci:2, usb-host:0, usb-host:1; and since all of them can't be mapped to a relevant iana-hardware class will have the class value `unknown`. Thus by the definition you can't have the pci:0 with a `parent-rel-pos` value `0` at the same time usb-host:0 has also the `parent-rel-pos` equal to `0`. The argument could be made that if the pci:0 node has a `parent-rel-pos equal` to `0` then maybe usb-host should use a different ordering scheme starting from 10, but how would this be more useful than incremental values since the recommendation based on slot ordering is broken anyway, in complex systems this could easily scale up to hundreds and having a node `generic:0` be assigned a `parent-rel-pos` of 8001 is of no use and computationally heavy while also taking into consideration nodes that do not match any external numbering or clearly visible ordering while also being in the same hardware class.
+* Second of all the recommendations for the `entPhysicalParentRelPos` are applicable only to SNMP agents that implement the ENTITY-MIB and since this plugin bypasses a SNMP implementation mainly because there's no undisclosed SNMP agent in Debian systems that implement the ENTITY-MIB we are going to follow a `consistent (but possibly arbitrary) ordering to a given set of 'sibling' components` that is proposed as a last resort if the `parent-rel-pos` could not be determined by any other means.
