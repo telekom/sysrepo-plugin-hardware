@@ -29,12 +29,6 @@
 #include <stdint.h>
 #include <vector>
 
-struct SensorsInitFail : public std::exception {
-    const char* what() const throw() override {
-        return "sensor_init() failure";
-    }
-};
-
 namespace hardware {
 
 struct Sensor : public ComponentData {
@@ -113,6 +107,7 @@ struct Sensor : public ComponentData {
                                std::string const& mainXpath) const override {
         std::string sensorPath = mainXpath + "/component[name='" + name + "']";
         logMessage(SR_LL_DBG, "Setting values for component: " + name);
+
         setXpath(session, parent, sensorPath + "/class", classType);
         setXpath(session, parent, sensorPath + "/sensor-data/value", std::to_string(value));
         setXpath(session, parent, sensorPath + "/sensor-data/value-type",
@@ -137,34 +132,62 @@ struct Sensor : public ComponentData {
                      timeString);
         }
         setXpath(session, parent, sensorPath + std::string("/sensor-data/value-update-rate"), "0");
+        if (!sensorThresholds.empty()) {
+            std::string sensorThresholdPath(
+                sensorPath +
+                "/sensor-notifications-augment:sensor-notifications/sensor-threshold[name='");
+            for (auto const& sens : sensorThresholds) {
+                if (sens->type == SensorThreshold::ThresholdType::max) {
+                    setXpath(session, parent, sensorThresholdPath + sens->name + "']/max",
+                             std::to_string(sens->value));
+                } else {
+                    setXpath(session, parent, sensorThresholdPath + sens->name + "']/min",
+                             std::to_string(sens->value));
+                }
+            }
+        }
     }
 
-    bool setValueFromSubfeature(sensors_chip_name const* cn,
-                                sensors_feature const* feature,
-                                sensors_subfeature_type type,
-                                int32_t precision) {
+    static std::optional<int32_t> getValueFromSubfeature(sensors_chip_name const* cn,
+                                                         sensors_feature const* feature,
+                                                         sensors_subfeature_type type,
+                                                         int32_t precision) {
         double val;
+        std::optional<int32_t> result;
         sensors_subfeature const* subf = sensors_get_subfeature(cn, feature, type);
         if (!subf) {
-            return false;
+            return result;
         }
         if (subf->flags & SENSORS_MODE_R) {
             int rc = sensors_get_value(cn, subf->number, &val);
             if (rc < 0) {
                 logMessage(SR_LL_WRN, std::string("Couldn't get sensor value. Error code: ") +
                                           std::to_string(rc));
-                return false;
             } else {
                 logMessage(SR_LL_DBG, std::string("Got sensor: ") + cn->prefix + "/" +
                                           feature->name + " value " + std::to_string(val));
-                value = val * std::pow(10, precision);
-                return true;
+                result = val * std::pow(10, precision);
             }
         } else {
             logMessage(SR_LL_WRN, std::string("Couldn't read sensor: ") + cn->prefix + "/" +
                                       feature->name + "/" + subf->name);
-            return false;
         }
+
+        return result;
+    }
+
+    bool setValueFromSubfeature(sensors_chip_name const* cn,
+                                sensors_feature const* feature,
+                                sensors_subfeature_type type,
+                                int32_t precision) {
+        std::optional<int32_t> val = getValueFromSubfeature(cn, feature, type, precision);
+        if (!val) {
+            return false;
+        } else {
+            value = val.value();
+        }
+
+        return true;
     }
 
     int32_t value;
@@ -172,73 +195,6 @@ struct Sensor : public ComponentData {
     ValueScale valueScale;
     int32_t valuePrecision;
     std::time_t valueTimestamp;
-};
-
-struct HardwareSensors {
-
-    HardwareSensors() {
-        if (sensors_init(nullptr) != 0) {
-            throw SensorsInitFail();
-        }
-    }
-
-    ~HardwareSensors() {
-        sensors_cleanup();
-    }
-
-    void parseSensorData(ComponentMap& hwComponents) {
-        sensors_chip_name const* cn = nullptr;
-        int c = 0;
-        while ((cn = sensors_get_detected_chips(0, &c))) {
-            sensors_feature const* feature = nullptr;
-            int f = 0;
-            while ((feature = sensors_get_features(cn, &f))) {
-                Sensor tempSensor(std::string(cn->prefix) + "/" + feature->name);
-                bool result(false);
-                switch (feature->type) {
-                case SENSORS_FEATURE_IN:
-                    tempSensor.valueType = Sensor::ValueType::volts_dc;
-                    tempSensor.valuePrecision = 3;
-                    result = tempSensor.setValueFromSubfeature(
-                        cn, feature, SENSORS_SUBFEATURE_IN_INPUT, tempSensor.valuePrecision);
-                    break;
-                case SENSORS_FEATURE_CURR:
-                    tempSensor.valueType = Sensor::ValueType::amperes;
-                    tempSensor.valuePrecision = 3;
-                    result = tempSensor.setValueFromSubfeature(
-                        cn, feature, SENSORS_SUBFEATURE_CURR_INPUT, tempSensor.valuePrecision);
-                    break;
-                case SENSORS_FEATURE_TEMP:
-                    tempSensor.valueType = Sensor::ValueType::celsius;
-                    result = tempSensor.setValueFromSubfeature(
-                        cn, feature, SENSORS_SUBFEATURE_TEMP_INPUT, tempSensor.valuePrecision);
-                    break;
-                case SENSORS_FEATURE_FAN:
-                    tempSensor.valueType = Sensor::ValueType::rpm;
-                    result = tempSensor.setValueFromSubfeature(
-                        cn, feature, SENSORS_SUBFEATURE_FAN_INPUT, tempSensor.valuePrecision);
-                    break;
-                case SENSORS_FEATURE_POWER:
-                    tempSensor.valueType = Sensor::ValueType::watts;
-                    result = tempSensor.setValueFromSubfeature(
-                        cn, feature, SENSORS_SUBFEATURE_POWER_INPUT, tempSensor.valuePrecision);
-                    break;
-                case SENSORS_FEATURE_HUMIDITY:
-                    tempSensor.valueType = Sensor::ValueType::percent_rh;
-                    result = tempSensor.setValueFromSubfeature(
-                        cn, feature, SENSORS_SUBFEATURE_HUMIDITY_INPUT, tempSensor.valuePrecision);
-                    break;
-                default:
-                    tempSensor.valueType = Sensor::ValueType::other;
-                    break;
-                }
-                if (result) {
-                    hwComponents.emplace(std::string(tempSensor.name),
-                                         std::make_shared<Sensor>(tempSensor));
-                }
-            }
-        }
-    }
 };
 
 }  // namespace hardware

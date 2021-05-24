@@ -23,8 +23,10 @@
 #include <utils/rapidjson/document.h>
 #include <utils/rapidjson/istreamwrapper.h>
 
+#include "hardware_sensors.h"
 #include <chrono>
 #include <fstream>
+#include <mutex>
 #include <regex>
 
 namespace hardware {
@@ -35,14 +37,15 @@ struct Callback {
     using Document = rapidjson::Document;
     using IStreamWrapper = rapidjson::IStreamWrapper;
 
-    static int configurationCallback([[maybe_unused]] S_Session session,
+    static int configurationCallback(S_Session session,
                                      char const* module_name,
                                      char const* /* xpath */,
                                      sr_event_t /* event */,
                                      uint32_t /* request_id */) {
         printCurrentConfig(session, module_name);
+        HardwareSensors::getInstance().stopAndJoin();
         ComponentData::populateConfigData(session, module_name);
-
+        HardwareSensors::getInstance().start();
         return SR_ERR_OK;
     }
 
@@ -54,7 +57,13 @@ struct Callback {
                                    S_Data_Node& parent) {
         parent = nullptr;
         std::smatch sm;
-        std::string request_xpath_string(request_xpath), filteredName;
+        std::string request_xpath_string, filteredName;
+        if (request_xpath) {
+            request_xpath_string = request_xpath;
+        } else {
+            request_xpath_string = "ietf-hardware:hardware";
+        }
+
         if (std::regex_search(
                 request_xpath_string, sm,
                 std::regex("ietf-hardware:hardware/component\\[name='(.*?)'\\](.*)"))) {
@@ -97,8 +106,7 @@ struct Callback {
         parseAndSetComponents(doc, hwComponents, std::string());
 
         try {
-            HardwareSensors hwsens;
-            hwsens.parseSensorData(hwComponents);
+            HardwareSensors::getInstance().parseSensorData(hwComponents);
         } catch (std::exception const& e) {
             logMessage(SR_LL_WRN, "hardware-sensors nodes failure: " + std::string(e.what()));
         }

@@ -37,11 +37,26 @@ using libyang::S_Data_Node;
 using libyang::S_Schema_Node;
 using libyang::Schema_Node_Leaf;
 using libyang::Schema_Node_Leaflist;
+using libyang::Schema_Node_List;
 
 struct ComponentData;
+struct SensorThreshold;
 
 using ComponentMap = std::unordered_map<std::string, std::shared_ptr<ComponentData>>;
 using ComponentList = std::list<std::shared_ptr<ComponentData>>;
+using SensorThresholdList = std::list<std::shared_ptr<SensorThreshold>>;
+
+struct SensorThreshold {
+    enum class ThresholdType { min, max };
+
+    SensorThreshold(std::string const& newName)
+        : name(newName), value(0), type(ThresholdType::min), triggered(false){};
+
+    std::string name;
+    int32_t value;
+    ThresholdType type;
+    bool triggered;
+};
 
 struct ComponentData {
 
@@ -184,15 +199,20 @@ struct ComponentData {
         if (uuid) {
             std::cout << "uuid: " << uuid.value() << std::endl;
         }
+        if (!sensorThresholds.empty()) {
+            std::cout << "sensor thresholds: ";
+        }
+        for (auto const& c : sensorThresholds) {
+            std::cout << c << ", ";
+        }
         if (!uri.empty()) {
-            std::cout << "uri: ";
+            std::cout << std::endl << "uri: ";
         }
         for (auto const& c : uri) {
             std::cout << c << ", ";
         }
-
         if (!children.empty()) {
-            std::cout << "children: ";
+            std::cout << std::endl << "children: ";
         }
         for (auto const& c : children) {
             std::cout << c << ", ";
@@ -237,29 +257,56 @@ struct ComponentData {
         std::string const data_xpath(std::string("/") + module_name + ":hardware");
         S_Data_Node toplevel(session->get_data(data_xpath.c_str()));
         std::shared_ptr<ComponentData> component;
+        std::shared_ptr<SensorThreshold> sensThreshold;
+        bool isSensorNotification(false);
 
         hwConfigData.clear();
         for (S_Data_Node& root : toplevel->tree_for()) {
             for (S_Data_Node const& node : root->tree_dfs()) {
                 S_Schema_Node schema = node->schema();
                 switch (schema->nodetype()) {
+                case LYS_LIST: {
+                    if (std::string(schema->name()) == "sensor-threshold") {
+                        isSensorNotification = true;
+                    } else {
+                        isSensorNotification = false;
+                    }
+                    break;
+                }
                 case LYS_LEAF: {
                     Data_Node_Leaf_List leaf(node);
                     Schema_Node_Leaf sleaf(schema);
-                    if (sleaf.is_key()) {
-                        component = std::make_shared<ComponentData>(leaf.value_str());
-                        hwConfigData.push_back(component);
-                    } else if (component) {
-                        if (std::string(sleaf.name()) == "class") {
-                            component->classType = leaf.value_str();
-                        } else if (std::string(sleaf.name()) == "parent") {
-                            component->parentName = leaf.value_str();
-                        } else if (std::string(sleaf.name()) == "parent-rel-pos") {
-                            component->parent_rel_pos = leaf.value()->int32();
-                        } else if (std::string(sleaf.name()) == "alias") {
-                            component->alias = leaf.value_str();
-                        } else if (std::string(sleaf.name()) == "asset-id") {
-                            component->assetID = leaf.value_str();
+                    if (isSensorNotification) {
+                        if (sleaf.is_key() && component) {
+                            sensThreshold = std::make_shared<SensorThreshold>(leaf.value_str());
+                            component->sensorThresholds.push_back(sensThreshold);
+                        } else if (component && sensThreshold) {
+                            if (std::string(sleaf.name()) == "max") {
+                                sensThreshold->type = SensorThreshold::ThresholdType::max;
+                                sensThreshold->value = leaf.value()->int32();
+                            } else if (std::string(sleaf.name()) == "min") {
+                                sensThreshold->type = SensorThreshold::ThresholdType::min;
+                                sensThreshold->value = leaf.value()->int32();
+                            }
+                        } else if (std::string(sleaf.name()) == "poll-interval") {
+                            ComponentData::pollInterval = leaf.value()->uint32();
+                        }
+                    } else {
+                        if (sleaf.is_key()) {
+                            component = std::make_shared<ComponentData>(leaf.value_str());
+                            hwConfigData.push_back(component);
+                        } else if (component) {
+                            if (std::string(sleaf.name()) == "class") {
+                                component->classType = leaf.value_str();
+                            } else if (std::string(sleaf.name()) == "parent") {
+                                component->parentName = leaf.value_str();
+                            } else if (std::string(sleaf.name()) == "parent-rel-pos") {
+                                component->parent_rel_pos = leaf.value()->int32();
+                            } else if (std::string(sleaf.name()) == "alias") {
+                                component->alias = leaf.value_str();
+                            } else if (std::string(sleaf.name()) == "asset-id") {
+                                component->assetID = leaf.value_str();
+                            }
                         }
                     }
                     break;
@@ -267,7 +314,7 @@ struct ComponentData {
                 case LYS_LEAFLIST: {
                     Data_Node_Leaf_List leaflist(node);
                     Schema_Node_Leaflist sleaf(schema);
-                    if (component && std::string(sleaf.name()) == "uri") {
+                    if (!isSensorNotification && component && std::string(sleaf.name()) == "uri") {
                         component->uri.emplace_back(leaflist.value_str());
                     }
                     break;
@@ -297,11 +344,14 @@ struct ComponentData {
     std::optional<std::string> assetID;
     std::optional<std::string> uuid;
     std::list<std::string> uri;
+    SensorThresholdList sensorThresholds;
 
+    static uint32_t pollInterval;
     static ComponentList hwConfigData;
 };
 
 ComponentList ComponentData::hwConfigData;
+uint32_t ComponentData::pollInterval = DEFAULT_POLL_INTERVAL;
 
 }  // namespace hardware
 

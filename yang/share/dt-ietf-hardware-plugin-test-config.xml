@@ -20,4 +20,18 @@
         <class xmlns:iana-hardware="urn:ietf:params:xml:ns:yang:iana-hardware">iana-hardware:unknown</class>
         <alias>Test-Alias</alias>
     </component>
+    <component>
+        <name>coretemp/temp1</name>
+        <class xmlns:iana-hardware="urn:ietf:params:xml:ns:yang:iana-hardware">iana-hardware:sensor</class>
+        <sensor-notifications xmlns="urn:ietf:params:xml:ns:yang:sensor-notifications-augment">
+            <sensor-threshold>
+                <name>critical</name>
+                <max>80</max>
+            </sensor-threshold>
+            <sensor-threshold>
+                <name>toolow</name>
+                <min>50</min>
+            </sensor-threshold>
+        </sensor-notifications>
+    </component>
 </hardware>

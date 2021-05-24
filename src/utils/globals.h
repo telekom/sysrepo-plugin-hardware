@@ -21,6 +21,13 @@
 #include <sysrepo-cpp/Session.hpp>
 
 #define COMPONENTS_LOCATION "/tmp/hardware_components.json"
+#define DEFAULT_POLL_INTERVAL 60  // seconds
+
+struct SensorsInitFail : public std::exception {
+    const char* what() const throw() override {
+        return "sensor_init() failure";
+    }
+};
 
 static void logMessage(sr_log_level_t log, std::string msg) {
     msg = "IETF-Hardware: " + msg;
