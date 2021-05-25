@@ -7,6 +7,10 @@ module sensor-notifications-augment {
     prefix hw;
   }
 
+  import iana-hardware {
+    prefix ianahw;
+  }
+
   organization
     "Deutsche Telekom AG.";
 
@@ -18,6 +22,12 @@ module sensor-notifications-augment {
   augment "/hw:hardware/hw:component" {
     if-feature hw:hardware-sensor;
     container sensor-notifications {
+      when 'derived-from-or-self(../hw:class,
+                             "ianahw:sensor")' {
+        description
+          "Sensor data nodes present for any component of type
+           'sensor'";
+      }
       description "Configure thresholds for notifications for sensors values that are being
         monitored.";
       leaf poll-interval {
@@ -57,7 +67,7 @@ module sensor-notifications-augment {
       description "Notifications to be sent when a sensor value crosses
                   a configured threshold.
                   PD - An additional sensor name is not needed in this case since it is augmented under component
-                  and the 'name' leaf will be provided with the notification along with 'class'";
+                  and the 'name' leaf will be provided with the notification";
 
       leaf sensor-threshold-name {
         type leafref {
@@ -90,7 +100,7 @@ module sensor-notifications-augment {
       leaf sensor-value {
         type hw:sensor-value;
         description "PD - Functionally having this as a leafref is wrong because sensor values can differ
-                    between two sensor data gets and the value from the operational data request can and most of the time
+                    between two sensor data gets and the sensor value from the operational data request can and most of the time
                     will be different than the sensor value which triggered the notification in the first place.";
       }
     }

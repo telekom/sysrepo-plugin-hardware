@@ -133,6 +133,9 @@ struct Sensor : public ComponentData {
         }
         setXpath(session, parent, sensorPath + std::string("/sensor-data/value-update-rate"), "0");
         if (!sensorThresholds.empty()) {
+            setXpath(session, parent, sensorPath +
+                    std::string("/sensor-notifications-augment:sensor-notifications/poll-interval"),
+                    std::to_string(ComponentData::pollInterval));
             std::string sensorThresholdPath(
                 sensorPath +
                 "/sensor-notifications-augment:sensor-notifications/sensor-threshold[name='");

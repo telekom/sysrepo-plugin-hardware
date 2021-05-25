@@ -43,9 +43,10 @@ struct Callback {
                                      sr_event_t /* event */,
                                      uint32_t /* request_id */) {
         printCurrentConfig(session, module_name);
-        HardwareSensors::getInstance().stopAndJoin();
+        std::lock_guard<std::mutex> (HardwareSensors::getInstance().mNotificationMtx);
+        HardwareSensors::getInstance().notifyAndJoin();
         ComponentData::populateConfigData(session, module_name);
-        HardwareSensors::getInstance().start();
+        HardwareSensors::getInstance().startThread();
         return SR_ERR_OK;
     }
 

@@ -288,8 +288,6 @@ struct ComponentData {
                                 sensThreshold->type = SensorThreshold::ThresholdType::min;
                                 sensThreshold->value = leaf.value()->int32();
                             }
-                        } else if (std::string(sleaf.name()) == "poll-interval") {
-                            ComponentData::pollInterval = leaf.value()->uint32();
                         }
                     } else {
                         if (sleaf.is_key()) {
@@ -308,6 +306,9 @@ struct ComponentData {
                                 component->assetID = leaf.value_str();
                             }
                         }
+                    }
+                    if (std::string(sleaf.name()) == "poll-interval") {
+                        ComponentData::pollInterval = leaf.value()->uint32();
                     }
                     break;
                 }

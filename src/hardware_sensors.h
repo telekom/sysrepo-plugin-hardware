@@ -23,6 +23,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <future>
 #include <mutex>
 #include <thread>
@@ -37,7 +38,7 @@ struct HardwareSensors {
     }
 
 private:
-    HardwareSensors() : mThresholdLoop(false) {
+    HardwareSensors() {
         if (sensors_init(nullptr) != 0) {
             throw SensorsInitFail();
         }
@@ -50,7 +51,7 @@ private:
              sensorValue < sensThr->value) ||
             (sensThr->type == SensorThreshold::ThresholdType::max &&
              sensorValue > sensThr->value)) {
-            logMessage(SR_LL_DBG, "Sensor threshold triggered for: " + componentName +
+            logMessage(SR_LL_INF, "Sensor threshold triggered for: " + componentName +
                                       ". Sending Notification...");
 
             std::string notifPath("/ietf-hardware:hardware/component[name='");
@@ -77,8 +78,8 @@ private:
     }
 
     void runFunc() {
-        while (mThresholdLoop) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        std::unique_lock<std::mutex> lk(mNotificationMtx);
+        while (mCV.wait_for(lk, std::chrono::seconds(ComponentData::pollInterval)) == std::cv_status::timeout) {
             for (auto const& configData : ComponentData::hwConfigData) {
                 if (configData && !configData->sensorThresholds.empty()) {
                     std::optional<int32_t> value = getValue(configData->name);
@@ -101,20 +102,19 @@ public:
     void operator=(HardwareSensors const&) = delete;
 
     ~HardwareSensors() {
-        stopAndJoin();
+        notifyAndJoin();
         sensors_cleanup();
     }
 
-    void stopAndJoin() {
-        if (mThresholdLoop) {
-            mThresholdLoop = false;
+    void notifyAndJoin() {
+        if (mThread.joinable()) {
+            mCV.notify_all();
             mThread.join();
         }
     }
 
-    void start() {
-        if (!mThresholdLoop) {
-            mThresholdLoop = true;
+    void startThread() {
+        if (!mThread.joinable()) {
             mThread = std::thread(&HardwareSensors::runFunc, this);
         }
     }
@@ -227,8 +227,8 @@ public:
         }
     }
 
-    std::mutex notificationMtx;
-    std::atomic_bool mThresholdLoop;
+    std::mutex mNotificationMtx;
+    std::condition_variable mCV;
 
 private:
     std::thread mThread;

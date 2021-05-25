@@ -24,9 +24,10 @@
         <name>coretemp/temp1</name>
         <class xmlns:iana-hardware="urn:ietf:params:xml:ns:yang:iana-hardware">iana-hardware:sensor</class>
         <sensor-notifications xmlns="urn:ietf:params:xml:ns:yang:sensor-notifications-augment">
+            <poll-interval>2</poll-interval>
             <sensor-threshold>
                 <name>critical</name>
-                <max>80</max>
+                <max>90</max>
             </sensor-threshold>
             <sensor-threshold>
                 <name>toolow</name>
