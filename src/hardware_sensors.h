@@ -44,15 +44,15 @@ private:
         }
     }
 
-    void triggerNotification(std::string const& componentName,
-                             std::shared_ptr<SensorThreshold> sensThr,
-                             int32_t sensorValue) {
+    void checkAndTriggerNotification(std::string const& componentName,
+                                     std::shared_ptr<SensorThreshold> sensThr,
+                                     int32_t sensorValue) {
         if ((sensThr->type == SensorThreshold::ThresholdType::min &&
              sensorValue < sensThr->value) ||
             (sensThr->type == SensorThreshold::ThresholdType::max &&
              sensorValue > sensThr->value)) {
-            logMessage(SR_LL_INF, "Sensor threshold triggered for: " + componentName +
-                                      ". Sending Notification...");
+            logMessage(SR_LL_INF, "Sensor threshold triggered for: " + componentName + " value " +
+                                      std::to_string(sensorValue) + ". Sending Notification...");
 
             std::string notifPath("/ietf-hardware:hardware/component[name='");
             notifPath +=
@@ -74,23 +74,28 @@ private:
             in_vals->val(2)->set((notifPath + "/sensor-value").c_str(), sensorValue);
 
             sess->event_notif_send(notifPath.c_str(), in_vals);
+            sensThr->triggered = true;
         }
     }
 
     void runFunc() {
         std::unique_lock<std::mutex> lk(mNotificationMtx);
+        bool worthChecking(true);
         while (mCV.wait_for(lk, std::chrono::seconds(ComponentData::pollInterval)) ==
-               std::cv_status::timeout) {
+                   std::cv_status::timeout &&
+               worthChecking) {
+            worthChecking = false;
             for (auto const& configData : ComponentData::hwConfigData) {
                 if (configData && !configData->sensorThresholds.empty()) {
                     std::optional<int32_t> value = getValue(configData->name);
                     if (!value) {
+                        worthChecking = true;
                         continue;
                     }
-                    for (auto const& sens : configData->sensorThresholds) {
-                        if (!sens->triggered) {
-                            triggerNotification(configData->name, sens, value.value());
-                            sens->triggered = true;
+                    for (auto const& sensThr : configData->sensorThresholds) {
+                        if (!sensThr->triggered) {
+                            worthChecking = true;
+                            checkAndTriggerNotification(configData->name, sensThr, value.value());
                         }
                     }
                 }
@@ -107,6 +112,10 @@ public:
         sensors_cleanup();
     }
 
+    void notify() {
+        mCV.notify_all();
+    }
+
     void notifyAndJoin() {
         if (mThread.joinable()) {
             mCV.notify_all();
@@ -115,9 +124,10 @@ public:
     }
 
     void startThread() {
-        if (!mThread.joinable()) {
-            mThread = std::thread(&HardwareSensors::runFunc, this);
+        if (mThread.joinable()) {
+            mThread.join();
         }
+        mThread = std::thread(&HardwareSensors::runFunc, this);
     }
 
     std::optional<int32_t> getValue(std::string const& sensorName) {

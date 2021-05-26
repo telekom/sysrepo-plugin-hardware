@@ -31,7 +31,9 @@ module sensor-notifications-augment {
       description "Configure thresholds for notifications for sensors values that are being
         monitored.";
       leaf poll-interval {
-        type uint32;
+        type uint32 {
+          range 1..max;
+        }
         description "Interval between consecutive sensor data collection triggers";
         default 60;
         units "seconds";

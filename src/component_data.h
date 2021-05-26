@@ -52,6 +52,10 @@ struct SensorThreshold {
     SensorThreshold(std::string const& newName)
         : name(newName), value(0), type(ThresholdType::min), triggered(false){};
 
+    void printSensorThreshold() {
+        std::cout << "(" << name << ", " << value << ", " << triggered << ")" << std::endl;
+    }
+
     std::string name;
     int32_t value;
     ThresholdType type;
@@ -203,7 +207,7 @@ struct ComponentData {
             std::cout << "sensor thresholds: ";
         }
         for (auto const& c : sensorThresholds) {
-            std::cout << c << ", ";
+            c->printSensorThreshold();
         }
         if (!uri.empty()) {
             std::cout << std::endl << "uri: ";
