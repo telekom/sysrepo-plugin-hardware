@@ -79,7 +79,8 @@ private:
 
     void runFunc() {
         std::unique_lock<std::mutex> lk(mNotificationMtx);
-        while (mCV.wait_for(lk, std::chrono::seconds(ComponentData::pollInterval)) == std::cv_status::timeout) {
+        while (mCV.wait_for(lk, std::chrono::seconds(ComponentData::pollInterval)) ==
+               std::cv_status::timeout) {
             for (auto const& configData : ComponentData::hwConfigData) {
                 if (configData && !configData->sensorThresholds.empty()) {
                     std::optional<int32_t> value = getValue(configData->name);

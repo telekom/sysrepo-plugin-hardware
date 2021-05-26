@@ -43,7 +43,7 @@ struct Callback {
                                      sr_event_t /* event */,
                                      uint32_t /* request_id */) {
         printCurrentConfig(session, module_name);
-        std::lock_guard<std::mutex> (HardwareSensors::getInstance().mNotificationMtx);
+        std::lock_guard<std::mutex> lk(HardwareSensors::getInstance().mNotificationMtx);
         HardwareSensors::getInstance().notifyAndJoin();
         ComponentData::populateConfigData(session, module_name);
         HardwareSensors::getInstance().startThread();
