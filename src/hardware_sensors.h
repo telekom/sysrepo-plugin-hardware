@@ -156,15 +156,15 @@ public:
                     break;
                 case SENSORS_FEATURE_FAN:
                     value = Sensor::getValueFromSubfeature(cn, feature,
-                                                           SENSORS_SUBFEATURE_FAN_INPUT, 3);
+                                                           SENSORS_SUBFEATURE_FAN_INPUT, 0);
                     break;
                 case SENSORS_FEATURE_POWER:
                     value = Sensor::getValueFromSubfeature(cn, feature,
-                                                           SENSORS_SUBFEATURE_POWER_INPUT, 3);
+                                                           SENSORS_SUBFEATURE_POWER_INPUT, 0);
                     break;
                 case SENSORS_FEATURE_HUMIDITY:
                     value = Sensor::getValueFromSubfeature(cn, feature,
-                                                           SENSORS_SUBFEATURE_HUMIDITY_INPUT, 3);
+                                                           SENSORS_SUBFEATURE_HUMIDITY_INPUT, 0);
                     break;
                 default:
                     break;

@@ -27,7 +27,6 @@
 #include <chrono>
 #include <fstream>
 #include <mutex>
-#include <regex>
 
 namespace hardware {
 
@@ -56,26 +55,10 @@ struct Callback {
     static int operationalCallback(S_Session session,
                                    const char* module_name,
                                    const char* /* path */,
-                                   const char* request_xpath,
+                                   const char* /* request_xpath */,
                                    uint32_t /* request_id */,
                                    S_Data_Node& parent) {
         parent = nullptr;
-        std::smatch sm;
-        std::string request_xpath_string, filteredName;
-        if (request_xpath) {
-            request_xpath_string = request_xpath;
-        } else {
-            request_xpath_string = "ietf-hardware:hardware";
-        }
-
-        if (std::regex_search(
-                request_xpath_string, sm,
-                std::regex("ietf-hardware:hardware/component\\[name='(.*?)'\\](.*)"))) {
-            filteredName = sm[1];
-        } else if (!std::regex_search(request_xpath_string, std::regex("ietf-hardware:(.*)"))) {
-            logMessage(SR_LL_ERR, std::string("Invalid requested xpath: ") + request_xpath_string);
-            return SR_ERR_CALLBACK_FAILED;
-        }
 
         int rc = system("/usr/bin/lshw -json > " COMPONENTS_LOCATION);
         if (rc == -1) {
@@ -115,12 +98,8 @@ struct Callback {
             logMessage(SR_LL_WRN, "hardware-sensors nodes failure: " + std::string(e.what()));
         }
 
-        if (filteredName.empty()) {
-            for (auto const& c : hwComponents) {
-                c.second->setXpathForAllMembers(session, parent, set_xpath);
-            }
-        } else if (hwComponents.find(filteredName) != hwComponents.end()) {
-            hwComponents[filteredName]->setXpathForAllMembers(session, parent, set_xpath);
+        for (auto const& c : hwComponents) {
+            c.second->setXpathForAllMembers(session, parent, set_xpath);
         }
 
         if (!parent) {
