@@ -1,7 +1,7 @@
 module sensor-notifications-augment {
   yang-version 1.1;
-  namespace "urn:ietf:params:xml:ns:yang:sensor-notifications-augment";
-  prefix sensor-notifications-augment;
+  namespace "http://terastrm.net/ns/yang/sensor-notifications-augment";
+  prefix sensor-notif;
 
   import ietf-hardware {
     prefix hw;
@@ -38,14 +38,14 @@ module sensor-notifications-augment {
         default 60;
         units "seconds";
       }
-      list sensor-threshold {
+      list threshold {
         description "Configure threshold notifications for sensors values that are being
           monitored.";
         key name;
         leaf name {
           type string;
         }
-        choice threshold {
+        choice value {
           mandatory true;
           case max {
             leaf max {
@@ -65,27 +65,27 @@ module sensor-notifications-augment {
       }
     }
 
-    notification sensor-threshold-exceeded {
+    notification sensor-threshold-crossed {
       description "Notifications to be sent when a sensor value crosses
                   a configured threshold.
                   PD - An additional sensor name is not needed in this case since it is augmented under component
                   and the 'name' leaf will be provided with the notification";
 
-      leaf sensor-threshold-name {
+      leaf name {
         type leafref {
           path "/hw:hardware/hw:component[hw:name=current()/../../hw:name]"
-               + "/sensor-notifications/sensor-threshold/name";
+               + "/sensor-notifications/threshold/name";
         }
         description
           "Name of the sensor-threshold.";
       }
 
-      choice sensor-threshold-value {
+      choice threshold-value {
         case max {
           leaf max {
             type leafref {
               path "/hw:hardware/hw:component[hw:name=current()/../../hw:name]"
-                   + "/sensor-notifications/sensor-threshold/max";
+                   + "/sensor-notifications/threshold/max";
             }
           }
         }
@@ -93,7 +93,7 @@ module sensor-notifications-augment {
           leaf min {
             type leafref {
               path "/hw:hardware/hw:component[hw:name=current()/../../hw:name]"
-                   + "/sensor-notifications/sensor-threshold/min";
+                   + "/sensor-notifications/threshold/min";
             }
           }
         }

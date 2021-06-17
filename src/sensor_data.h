@@ -139,8 +139,7 @@ struct Sensor : public ComponentData {
                     std::string("/sensor-notifications-augment:sensor-notifications/poll-interval"),
                 std::to_string(ComponentData::pollInterval));
             std::string sensorThresholdPath(
-                sensorPath +
-                "/sensor-notifications-augment:sensor-notifications/sensor-threshold[name='");
+                sensorPath + "/sensor-notifications-augment:sensor-notifications/threshold[name='");
             for (auto const& sens : sensorThresholds) {
                 if (sens->type == SensorThreshold::ThresholdType::max) {
                     setXpath(session, parent, sensorThresholdPath + sens->name + "']/max",

@@ -55,8 +55,7 @@ private:
                                       std::to_string(sensorValue) + ". Sending Notification...");
 
             std::string notifPath("/ietf-hardware:hardware/component[name='");
-            notifPath +=
-                componentName + "']/sensor-notifications-augment:sensor-threshold-exceeded";
+            notifPath += componentName + "']/sensor-notifications-augment:sensor-threshold-crossed";
             /* connect to sysrepo */
             auto conn = std::make_shared<sysrepo::Connection>();
 
@@ -64,8 +63,7 @@ private:
             auto sess = std::make_shared<sysrepo::Session>(conn);
 
             auto in_vals = std::make_shared<sysrepo::Vals>(3);
-            in_vals->val(0)->set((notifPath + "/sensor-threshold-name").c_str(),
-                                 sensThr->name.c_str(), SR_STRING_T);
+            in_vals->val(0)->set((notifPath + "/name").c_str(), sensThr->name.c_str(), SR_STRING_T);
             if (sensThr->type == SensorThreshold::ThresholdType::min) {
                 in_vals->val(1)->set((notifPath + "/min").c_str(), sensThr->value);
             } else {

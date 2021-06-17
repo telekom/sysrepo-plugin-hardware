@@ -270,7 +270,7 @@ struct ComponentData {
                 S_Schema_Node schema = node->schema();
                 switch (schema->nodetype()) {
                 case LYS_LIST: {
-                    if (std::string(schema->name()) == "sensor-threshold") {
+                    if (std::string(schema->name()) == "threshold") {
                         isSensorNotification = true;
                     } else {
                         isSensorNotification = false;
