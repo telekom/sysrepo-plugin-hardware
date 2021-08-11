@@ -24,14 +24,14 @@
         <name>coretemp/temp1</name>
         <class xmlns:iana-hardware="urn:ietf:params:xml:ns:yang:iana-hardware">iana-hardware:sensor</class>
         <sensor-notifications xmlns="http://terastrm.net/ns/yang/sensor-notifications-augment">
-            <poll-interval>3</poll-interval>
+            <poll-interval>10</poll-interval>
             <threshold>
                 <name>critical</name>
-                <max>75</max>
+                <value>75</value>
             </threshold>
             <threshold>
                 <name>toolow</name>
-                <min>60</min>
+                <value>60</value>
             </threshold>
         </sensor-notifications>
     </component>
@@ -39,14 +39,14 @@
         <name>dell_smm/fan1</name>
         <class xmlns:iana-hardware="urn:ietf:params:xml:ns:yang:iana-hardware">iana-hardware:sensor</class>
         <sensor-notifications xmlns="http://terastrm.net/ns/yang/sensor-notifications-augment">
-            <poll-interval>3</poll-interval>
+            <poll-interval>30</poll-interval>
             <threshold>
                 <name>critical</name>
-                <max>2900</max>
+                <value>2900</value>
             </threshold>
             <threshold>
                 <name>toolow</name>
-                <min>1400</min>
+                <value>1400</value>
             </threshold>
         </sensor-notifications>
     </component>

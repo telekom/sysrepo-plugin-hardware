@@ -40,58 +40,45 @@ private:
     void checkAndTriggerNotification(std::string const& componentName,
                                      std::shared_ptr<SensorThreshold> sensThr,
                                      int32_t sensorValue) {
-        if ((sensThr->type == SensorThreshold::ThresholdType::min &&
-             sensorValue < sensThr->value) ||
-            (sensThr->type == SensorThreshold::ThresholdType::max &&
-             sensorValue > sensThr->value)) {
-            logMessage(SR_LL_INF, "Sensor threshold triggered for: " + componentName + " value " +
-                                      std::to_string(sensorValue) + ". Sending Notification...");
+        logMessage(SR_LL_INF, "Sensor threshold triggered for: " + componentName + " value " +
+                                  std::to_string(sensorValue) + ". Sending Notification...");
 
-            std::string notifPath("/ietf-hardware:hardware/component[name='");
-            notifPath += componentName + "']/sensor-notifications-augment:sensor-threshold-crossed";
-            /* connect to sysrepo */
-            auto conn = std::make_shared<sysrepo::Connection>();
+        std::string notifPath("/ietf-hardware:hardware/component[name='");
+        notifPath += componentName + "']/sensor-notifications-augment:sensor-threshold-crossed";
+        /* connect to sysrepo */
+        auto conn = std::make_shared<sysrepo::Connection>();
 
-            /* start session */
-            auto sess = std::make_shared<sysrepo::Session>(conn);
+        /* start session */
+        auto sess = std::make_shared<sysrepo::Session>(conn);
 
-            auto in_vals = std::make_shared<sysrepo::Vals>(3);
-            in_vals->val(0)->set((notifPath + "/name").c_str(), sensThr->name.c_str(), SR_STRING_T);
-            if (sensThr->type == SensorThreshold::ThresholdType::min) {
-                in_vals->val(1)->set((notifPath + "/min").c_str(), sensThr->value);
-            } else {
-                in_vals->val(1)->set((notifPath + "/max").c_str(), sensThr->value);
-            }
-            in_vals->val(2)->set((notifPath + "/sensor-value").c_str(), sensorValue);
-
-            sess->event_notif_send(notifPath.c_str(), in_vals);
-            sensThr->triggered = true;
+        auto in_vals = std::make_shared<sysrepo::Vals>(4);
+        in_vals->val(0)->set((notifPath + "/threshold-name").c_str(), sensThr->name.c_str(),
+                             SR_STRING_T);
+        in_vals->val(1)->set((notifPath + "/threshold-value").c_str(), sensThr->value);
+        if (sensorValue > sensThr->value) {
+            in_vals->val(2)->set((notifPath + "/rising").c_str(), nullptr, SR_LEAF_EMPTY_T);
+        } else {
+            in_vals->val(2)->set((notifPath + "/falling").c_str(), nullptr, SR_LEAF_EMPTY_T);
         }
+
+        in_vals->val(3)->set((notifPath + "/sensor-value").c_str(), sensorValue);
+
+        sess->event_notif_send(notifPath.c_str(), in_vals);
     }
 
-    void runFunc() {
+    void runFunc(std::shared_ptr<ComponentData> component) {
         std::unique_lock<std::mutex> lk(mNotificationMtx);
-        bool worthChecking(true);
-        while (mCV.wait_for(lk, std::chrono::seconds(ComponentData::pollInterval)) ==
-                   std::cv_status::timeout &&
-               worthChecking) {
-            worthChecking = false;
-            for (auto const& configData : ComponentData::hwConfigData) {
-                if (configData && !configData->sensorThresholds.empty()) {
-                    std::optional<int32_t> value = getValue(configData->name);
-                    if (!value) {
-                        worthChecking = true;
-                        continue;
-                    }
-                    for (auto const& sensThr : configData->sensorThresholds) {
-                        if (!sensThr->triggered) {
-                            worthChecking = true;
-                            checkAndTriggerNotification(configData->name, sensThr, value.value());
-                        }
-                    }
-                }
+        while (mCV.wait_for(lk, std::chrono::seconds(component->pollInterval)) ==
+               std::cv_status::timeout) {
+            std::optional<int32_t> value = getValue(component->name);
+            if (!value) {
+                continue;
+            }
+            for (auto const& sensThr : component->sensorThresholds) {
+                checkAndTriggerNotification(component->name, sensThr, value.value());
             }
         }
+        logMessage(SR_LL_DBG, "Thread for component: " + component->name + " ended.");
     }
 
 public:
@@ -108,17 +95,32 @@ public:
     }
 
     void notifyAndJoin() {
-        if (mThread.joinable()) {
-            mCV.notify_all();
-            mThread.join();
-        }
+        mCV.notify_all();
+        stopThreads();
     }
 
-    void startThread() {
-        if (mThread.joinable()) {
-            mThread.join();
+    void stopThreads() {
+        int32_t numThreadsStopped(0);
+        for (auto& [_, thread] : mThreads) {
+            if (thread.joinable()) {
+                thread.join();
+                numThreadsStopped++;
+            }
         }
-        mThread = std::thread(&HardwareSensors::runFunc, this);
+        logMessage(SR_LL_DBG, std::to_string(numThreadsStopped) + " threads stopped, out of: " +
+                                  std::to_string(mThreads.size()) + " started.");
+        mThreads.clear();
+    }
+
+    void startThreads() {
+        stopThreads();
+        for (auto const& configData : ComponentData::hwConfigData) {
+            if (configData && !configData->sensorThresholds.empty()) {
+                logMessage(SR_LL_DBG, "Starting thread for component: " + configData->name + ".");
+                mThreads[configData->name] =
+                    std::thread(&HardwareSensors::runFunc, this, configData);
+            }
+        }
     }
 
     std::optional<int32_t> getValue(std::string const& sensorName) {
@@ -233,7 +235,7 @@ public:
     std::condition_variable mCV;
 
 private:
-    std::thread mThread;
+    std::unordered_map<std::string, std::thread> mThreads;
 };
 
 }  // namespace hardware

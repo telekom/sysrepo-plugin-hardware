@@ -40,26 +40,26 @@ using ComponentList = std::list<std::shared_ptr<ComponentData>>;
 using SensorThresholdList = std::list<std::shared_ptr<SensorThreshold>>;
 
 struct SensorThreshold {
-    enum class ThresholdType { min, max };
 
     SensorThreshold(std::string const& newName)
-        : name(newName), value(0), type(ThresholdType::min), triggered(false){};
+        : name(newName), value(0), rising(false), falling(false){};
 
     void printSensorThreshold() {
-        std::cout << "(" << name << ", " << value << ", " << triggered << ")" << std::endl;
+        std::cout << "(" << name << ", " << value << ", " << rising << ", " << falling << ")"
+                  << std::endl;
     }
 
     std::string name;
     int32_t value;
-    ThresholdType type;
-    bool triggered;
+    bool rising;
+    bool falling;
 };
 
 struct ComponentData {
 
     ComponentData(std::string const& compName,
                   std::string const& compClass = "iana-hardware:unknown")
-        : name(compName), classType(compClass){};
+        : name(compName), classType(compClass), pollInterval(DEFAULT_POLL_INTERVAL){};
 
     virtual ~ComponentData() = default;
 
@@ -197,16 +197,20 @@ struct ComponentData {
             std::cout << "uuid: " << uuid.value() << std::endl;
         }
         if (!sensorThresholds.empty()) {
-            std::cout << "sensor thresholds: ";
+            std::cout << "sensor thresholds: " << std::endl;
         }
         for (auto const& c : sensorThresholds) {
+            std::cout << "\t";
             c->printSensorThreshold();
         }
         if (!uri.empty()) {
-            std::cout << std::endl << "uri: ";
+            std::cout << "uri: ";
         }
         for (auto const& c : uri) {
             std::cout << c << ", ";
+        }
+        if (!uri.empty()) {
+            std::cout << std::endl;
         }
         if (!children.empty()) {
             std::cout << std::endl << "children: ";
@@ -214,6 +218,10 @@ struct ComponentData {
         for (auto const& c : children) {
             std::cout << c << ", ";
         }
+        if (!children.empty()) {
+            std::cout << std::endl;
+        }
+        std::cout << "pollinterval: " << pollInterval << std::endl;
         std::cout << std::endl;
     }
 
@@ -278,11 +286,7 @@ struct ComponentData {
                             sensThreshold = std::make_shared<SensorThreshold>(leaf.value_str());
                             component->sensorThresholds.push_back(sensThreshold);
                         } else if (component && sensThreshold) {
-                            if (std::string(sleaf.name()) == "max") {
-                                sensThreshold->type = SensorThreshold::ThresholdType::max;
-                                sensThreshold->value = leaf.value()->int32();
-                            } else if (std::string(sleaf.name()) == "min") {
-                                sensThreshold->type = SensorThreshold::ThresholdType::min;
+                            if (std::string(sleaf.name()) == "value") {
                                 sensThreshold->value = leaf.value()->int32();
                             }
                         }
@@ -304,8 +308,8 @@ struct ComponentData {
                             }
                         }
                     }
-                    if (std::string(sleaf.name()) == "poll-interval") {
-                        ComponentData::pollInterval = leaf.value()->uint32();
+                    if (std::string(sleaf.name()) == "poll-interval" && component) {
+                        component->pollInterval = leaf.value()->uint32();
                     }
                     break;
                 }
@@ -343,13 +347,12 @@ struct ComponentData {
     std::optional<std::string> uuid;
     std::list<std::string> uri;
     SensorThresholdList sensorThresholds;
+    uint32_t pollInterval;
 
-    static uint32_t pollInterval;
     static ComponentList hwConfigData;
 };
 
 ComponentList ComponentData::hwConfigData;
-uint32_t ComponentData::pollInterval = DEFAULT_POLL_INTERVAL;
 
 }  // namespace hardware
 

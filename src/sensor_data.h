@@ -134,13 +134,8 @@ struct Sensor : public ComponentData {
             std::string sensorThresholdPath(
                 sensorPath + "/sensor-notifications-augment:sensor-notifications/threshold[name='");
             for (auto const& sens : sensorThresholds) {
-                if (sens->type == SensorThreshold::ThresholdType::max) {
-                    setXpath(session, parent, sensorThresholdPath + sens->name + "']/max",
-                             std::to_string(sens->value));
-                } else {
-                    setXpath(session, parent, sensorThresholdPath + sens->name + "']/min",
-                             std::to_string(sens->value));
-                }
+                setXpath(session, parent, sensorThresholdPath + sens->name + "']/value",
+                         std::to_string(sens->value));
             }
         }
     }

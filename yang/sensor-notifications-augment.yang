@@ -45,65 +45,56 @@ module sensor-notifications-augment {
         leaf name {
           type string;
         }
-        choice value {
-          mandatory true;
-          case max {
-            leaf max {
-              type hw:sensor-value;
-              description "Send notification when the sensor-value exceeds the
-                configured threshold";
-            }
-          }
-          case min {
-            leaf min {
-              type hw:sensor-value;
-              description "Send notification when the sensor-value is less than the
-                configured threshold";
-            }
-          }
+        leaf value {
+          type hw:sensor-value;
+            description "Send notification when the sensor-value exceeds the
+              configured threshold";
         }
       }
     }
 
     notification sensor-threshold-crossed {
       description "Notifications to be sent when a sensor value crosses
-                  a configured threshold.
-                  PD - An additional sensor name is not needed in this case since it is augmented under component
-                  and the 'name' leaf will be provided with the notification";
+                  a configured threshold.";
 
-      leaf name {
+      leaf threshold-name {
         type leafref {
           path "/hw:hardware/hw:component[hw:name=current()/../../hw:name]"
                + "/sensor-notifications/threshold/name";
+          require-instance false;
         }
         description
           "Name of the sensor-threshold.";
       }
 
-      choice threshold-value {
-        case max {
-          leaf max {
-            type leafref {
-              path "/hw:hardware/hw:component[hw:name=current()/../../hw:name]"
-                   + "/sensor-notifications/threshold/max";
-            }
+      leaf threshold-value {
+        type leafref {
+          path "/hw:hardware/hw:component[hw:name=current()/../../hw:name]"
+            + "/sensor-notifications/threshold/value";
+          require-instance false;
+        }
+      }
+
+      choice direction {
+        case rising {
+          leaf rising {
+            type empty;
           }
         }
-        case min {
-          leaf min {
-            type leafref {
-              path "/hw:hardware/hw:component[hw:name=current()/../../hw:name]"
-                   + "/sensor-notifications/threshold/min";
-            }
+        case falling {
+          leaf falling {
+            type empty;
           }
         }
       }
 
       leaf sensor-value {
-        type hw:sensor-value;
-        description "PD - Functionally having this as a leafref is wrong because sensor values can differ
-                    between two sensor data gets and the sensor value from the operational data request can and most of the time
-                    will be different than the sensor value which triggered the notification in the first place.";
+        config false;
+        type leafref {
+          path "/hw:hardware/hw:component[hw:name=current()/../../hw:name]"
+            + "/hw:sensor-data/hw:value";
+            require-instance false;
+        }
       }
     }
   }
