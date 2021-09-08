@@ -12,6 +12,8 @@ endif
 
 thread_dep = dependency('threads')
 
+find_program('lshw', required : true)
+
 inc = include_directories('utils')
 shared_library('ietf-hardware-plugin', 'ietf-hardware-plugin.cc',
                 include_directories : inc,

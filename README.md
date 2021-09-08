@@ -29,12 +29,17 @@ The full development progress can be found in the [documentation](./DOCUMENTATIO
 
 ### Dependencies
 ```
-libyang compiled with libyang-cpp
-sysrepo compiled with sysrepo-cpp
+libyang
+libyang-cpp
+sysrepo
+sysrepo-cpp
 libsensors4-dev
 lm-sensors
 pthreads
+lshw
 ```
+
+The libyang and sysrepo dependencies should be compiled from their public repositories `libyang1` branches.
 
 ### Build
 
@@ -48,6 +53,7 @@ The plugin install location is the `{prefix}` folder, the `libietf-hardware-plug
 Build by making a build directory (i.e. build/), run meson in that dir, and then use ninja to build the desired target.
 
 ```bash
+git clone git@github.com:telekom/sysrepo-plugin-hardware.git
 mkdir -p /opt/sysrepo/lib/sysrepo/plugins
 meson --prefix="/opt/sysrepo/lib/sysrepo/plugins" ./build
 ninja -C ./build
