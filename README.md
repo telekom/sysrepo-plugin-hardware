@@ -54,6 +54,7 @@ Build by making a build directory (i.e. build/), run meson in that dir, and then
 
 ```bash
 git clone git@github.com:telekom/sysrepo-plugin-hardware.git
+cd sysrepo-plugin-hardware
 mkdir -p /opt/sysrepo/lib/sysrepo/plugins
 meson --prefix="/opt/sysrepo/lib/sysrepo/plugins" ./build
 ninja -C ./build

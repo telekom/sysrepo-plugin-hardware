@@ -75,7 +75,11 @@ private:
                 continue;
             }
             for (auto const& sensThr : component->sensorThresholds) {
-                checkAndTriggerNotification(component->name, sensThr, value.value());
+                try {
+                    checkAndTriggerNotification(component->name, sensThr, value.value());
+                } catch (sysrepo::sysrepo_exception& ex) {
+                    logMessage(SR_LL_WRN, "Sending notification failed: " + std::string(ex.what()));
+                }
             }
         }
         logMessage(SR_LL_DBG, "Thread for component: " + component->name + " ended.");
