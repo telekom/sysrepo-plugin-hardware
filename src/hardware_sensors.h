@@ -14,10 +14,8 @@
 #include <sensor_data.h>
 #include <utils/globals.h>
 
-#include <atomic>
 #include <chrono>
 #include <condition_variable>
-#include <future>
 #include <mutex>
 #include <thread>
 
@@ -40,16 +38,18 @@ private:
     void checkAndTriggerNotification(std::string const& componentName,
                                      std::shared_ptr<SensorThreshold> sensThr,
                                      int32_t sensorValue) {
+        std::lock_guard lk(mSysrepoMtx);
         logMessage(SR_LL_INF, "Sensor threshold triggered for: " + componentName + " value " +
                                   std::to_string(sensorValue) + ". Sending Notification...");
 
         std::string notifPath("/ietf-hardware:hardware/component[name='");
         notifPath += componentName + "']/sensor-notifications-augment:sensor-threshold-crossed";
-        /* connect to sysrepo */
-        auto conn = std::make_shared<sysrepo::Connection>();
 
         /* start session */
-        auto sess = std::make_shared<sysrepo::Session>(conn);
+        if (!mConn) {
+            return;
+        }
+        auto sess = std::make_shared<sysrepo::Session>(mConn);
 
         auto in_vals = std::make_shared<sysrepo::Vals>(4);
         in_vals->val(0)->set((notifPath + "/threshold-name").c_str(), sensThr->name.c_str(),
@@ -113,7 +113,8 @@ public:
     }
 
     void startThreads() {
-        stopThreads();
+        std::call_once(mConnConstructed,
+                       [&]() { mConn = std::make_shared<sysrepo::Connection>(); });
         for (auto const& configData : ComponentData::hwConfigData) {
             if (configData && !configData->sensorThresholds.empty()) {
                 logMessage(SR_LL_DBG, "Starting thread for component: " + configData->name + ".");
@@ -124,6 +125,7 @@ public:
     }
 
     std::optional<int32_t> getValue(std::string const& sensorName) {
+        std::lock_guard lk(mSensorDataMtx);
         sensors_chip_name const* cn = nullptr;
         int c = 0;
         std::optional<int32_t> value;
@@ -172,6 +174,7 @@ public:
     }
 
     void parseSensorData(ComponentMap& hwComponents) {
+        std::lock_guard lk(mSensorDataMtx);
         sensors_chip_name const* cn = nullptr;
         int c = 0;
         while ((cn = sensors_get_detected_chips(0, &c))) {
@@ -231,10 +234,13 @@ public:
         }
     }
 
+private:
+    std::once_flag mConnConstructed;
+    sysrepo::S_Connection mConn;
+    std::mutex mSysrepoMtx;
     std::mutex mNotificationMtx;
     std::condition_variable mCV;
-
-private:
+    std::mutex mSensorDataMtx;
     std::unordered_map<std::string, std::thread> mThreads;
 };
 

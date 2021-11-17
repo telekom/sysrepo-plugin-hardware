@@ -36,11 +36,8 @@ struct Callback {
                                      uint32_t /* request_id */) {
         printCurrentConfig(session, module_name);
         logMessage(SR_LL_DBG, "Processing received configuration.");
-        HardwareSensors::getInstance().notify();
-        {
-            std::lock_guard<std::mutex> lk(HardwareSensors::getInstance().mNotificationMtx);
-            ComponentData::populateConfigData(session, module_name);
-        }
+        HardwareSensors::getInstance().notifyAndJoin();
+        { ComponentData::populateConfigData(session, module_name); }
         HardwareSensors::getInstance().startThreads();
         return SR_ERR_OK;
     }
