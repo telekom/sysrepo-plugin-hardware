@@ -86,14 +86,23 @@ struct Callback {
         ComponentMap hwComponents;
         parseAndSetComponents(doc, hwComponents, std::string());
 
+        auto const& modules = session.getContext().modules();
+        auto module = std::find_if(
+            modules.begin(), modules.end(),
+            [moduleName](libyang::Module const& module) { return moduleName == module.name(); });
+
         try {
-            HardwareSensors::getInstance().parseSensorData(hwComponents);
+            if (module != std::end(modules) && module->featureEnabled("hardware-sensor")) {
+                HardwareSensors::getInstance().parseSensorData(hwComponents);
+            }
         } catch (std::exception const& e) {
             logMessage(SR_LL_WRN, "hardware-sensors nodes failure: " + std::string(e.what()));
         }
 
         for (auto const& c : hwComponents) {
-            c.second->setXpathForAllMembers(session, parent, set_xpath, moduleName);
+            c.second->setXpathForAllMembers(session, parent, set_xpath,
+                                            (module != std::end(modules)) &&
+                                                module->featureEnabled("entity-mib"));
         }
 
         if (!parent) {

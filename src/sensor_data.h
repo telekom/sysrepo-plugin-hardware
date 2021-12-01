@@ -98,7 +98,7 @@ struct Sensor : public ComponentData {
     void setXpathForAllMembers(Session& session,
                                std::optional<libyang::DataNode>& parent,
                                std::string const& mainXpath,
-                               std::string_view moduleName) const override {
+                               bool /*setPhysicalID = false*/) const override {
         std::string sensorPath = mainXpath + "/component[name='" + name + "']";
         logMessage(SR_LL_DBG, "Setting values for component: " + name);
 

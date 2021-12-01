@@ -58,7 +58,7 @@ struct ComponentData {
     virtual void setXpathForAllMembers(Session& session,
                                        std::optional<libyang::DataNode>& parent,
                                        std::string const& mainXpath,
-                                       std::string_view moduleName) const {
+                                       bool setPhysicalID = false) const {
         std::string componentPath(mainXpath + "/component[name='" + name + "']");
         logMessage(SR_LL_DBG, "Setting values for component: " + name);
         // +--rw name              string
@@ -83,13 +83,10 @@ struct ComponentData {
         if (description) {
             setXpath(session, parent, componentPath + "/description", description.value());
         }
-        // TODO: fix
-        //        if (physicalID && parent &&
-        //        session.getContext().getModule(std::string(moduleName).c_str()).value().featureEnabled("entity-mib"))
-        //        {
-        //            setXpath(session, parent, componentPath + "/physical-index",
-        //                     std::to_string(physicalID.value()));
-        //        }
+        if (physicalID && setPhysicalID) {
+            setXpath(session, parent, componentPath + "/physical-index",
+                     std::to_string(physicalID.value()));
+        }
         if (parentName) {
             setXpath(session, parent, componentPath + "/parent", parentName.value());
         }
