@@ -23,15 +23,6 @@
 
 namespace hardware {
 
-using libyang::Data_Node;
-using libyang::Data_Node_Leaf_List;
-using libyang::S_Context;
-using libyang::S_Data_Node;
-using libyang::S_Schema_Node;
-using libyang::Schema_Node_Leaf;
-using libyang::Schema_Node_Leaflist;
-using libyang::Schema_Node_List;
-
 struct ComponentData;
 struct SensorThreshold;
 
@@ -41,7 +32,7 @@ using SensorThresholdList = std::list<std::shared_ptr<SensorThreshold>>;
 
 struct SensorThreshold {
 
-    SensorThreshold(std::string const& newName)
+    SensorThreshold(std::string_view newName)
         : name(newName), value(0), rising(false), falling(false){};
 
     void printSensorThreshold() {
@@ -57,15 +48,17 @@ struct SensorThreshold {
 
 struct ComponentData {
 
-    ComponentData(std::string const& compName,
-                  std::string const& compClass = "iana-hardware:unknown")
+    using Session = sysrepo::Session;
+
+    ComponentData(std::string_view compName, std::string const& compClass = "iana-hardware:unknown")
         : name(compName), classType(compClass), pollInterval(DEFAULT_POLL_INTERVAL){};
 
     virtual ~ComponentData() = default;
 
-    virtual void setXpathForAllMembers(sysrepo::S_Session& session,
-                                       S_Data_Node& parent,
-                                       std::string const& mainXpath) const {
+    virtual void setXpathForAllMembers(Session& session,
+                                       std::optional<libyang::DataNode>& parent,
+                                       std::string const& mainXpath,
+                                       std::string_view moduleName) const {
         std::string componentPath(mainXpath + "/component[name='" + name + "']");
         logMessage(SR_LL_DBG, "Setting values for component: " + name);
         // +--rw name              string
@@ -90,10 +83,13 @@ struct ComponentData {
         if (description) {
             setXpath(session, parent, componentPath + "/description", description.value());
         }
-        if (physicalID && parent && parent->node_module()->feature_state("entity-mib") == 1) {
-            setXpath(session, parent, componentPath + "/physical-index",
-                     std::to_string(physicalID.value()));
-        }
+        // TODO: fix
+        //        if (physicalID && parent &&
+        //        session.getContext().getModule(std::string(moduleName).c_str()).value().featureEnabled("entity-mib"))
+        //        {
+        //            setXpath(session, parent, componentPath + "/physical-index",
+        //                     std::to_string(physicalID.value()));
+        //        }
         if (parentName) {
             setXpath(session, parent, componentPath + "/parent", parentName.value());
         }
@@ -258,72 +254,70 @@ struct ComponentData {
         }
     }
 
-    static void populateConfigData(sysrepo::S_Session& session, char const* module_name) {
-        std::string const data_xpath(std::string("/") + module_name + ":hardware");
-        S_Data_Node toplevel(session->get_data(data_xpath.c_str()));
+    static void populateConfigData(Session& session, std::string_view module_name) {
+        std::string const data_xpath(std::string("/") + std::string(module_name) + ":hardware");
+        auto const& data = session.getData(data_xpath.c_str());
+        if (!data) {
+            logMessage(SR_LL_ERR, "No data found for population.");
+            return;
+        }
         std::shared_ptr<ComponentData> component;
         std::shared_ptr<SensorThreshold> sensThreshold;
         bool isSensorNotification(false);
 
         hwConfigData.clear();
-        for (S_Data_Node& root : toplevel->tree_for()) {
-            for (S_Data_Node const& node : root->tree_dfs()) {
-                S_Schema_Node schema = node->schema();
-                switch (schema->nodetype()) {
-                case LYS_LIST: {
-                    if (std::string(schema->name()) == "threshold") {
-                        isSensorNotification = true;
-                    } else {
-                        isSensorNotification = false;
-                    }
-                    break;
+        for (libyang::DataNode const& node : data.value().childrenDfs()) {
+            libyang::SchemaNode schema = node.schema();
+            switch (schema.nodeType()) {
+            case libyang::NodeType::List: {
+                if (std::string(schema.name()) == "threshold") {
+                    isSensorNotification = true;
+                } else {
+                    isSensorNotification = false;
                 }
-                case LYS_LEAF: {
-                    Data_Node_Leaf_List leaf(node);
-                    Schema_Node_Leaf sleaf(schema);
-                    if (isSensorNotification) {
-                        if (sleaf.is_key() && component) {
-                            sensThreshold = std::make_shared<SensorThreshold>(leaf.value_str());
-                            component->sensorThresholds.push_back(sensThreshold);
-                        } else if (component && sensThreshold) {
-                            if (std::string(sleaf.name()) == "value") {
-                                sensThreshold->value = leaf.value()->int32();
-                            }
-                        }
-                    } else {
-                        if (sleaf.is_key()) {
-                            component = std::make_shared<ComponentData>(leaf.value_str());
-                            hwConfigData.push_back(component);
-                        } else if (component) {
-                            if (std::string(sleaf.name()) == "class") {
-                                component->classType = leaf.value_str();
-                            } else if (std::string(sleaf.name()) == "parent") {
-                                component->parentName = leaf.value_str();
-                            } else if (std::string(sleaf.name()) == "parent-rel-pos") {
-                                component->parent_rel_pos = leaf.value()->int32();
-                            } else if (std::string(sleaf.name()) == "alias") {
-                                component->alias = leaf.value_str();
-                            } else if (std::string(sleaf.name()) == "asset-id") {
-                                component->assetID = leaf.value_str();
-                            }
+                break;
+            }
+            case libyang::NodeType::Leaf: {
+                if (isSensorNotification) {
+                    if (schema.asLeaf().isKey() && component) {
+                        sensThreshold = std::make_shared<SensorThreshold>(node.asTerm().valueStr());
+                        component->sensorThresholds.push_back(sensThreshold);
+                    } else if (component && sensThreshold) {
+                        if (std::string(schema.name()) == "value") {
+                            sensThreshold->value = std::get<int32_t>(node.asTerm().value());
                         }
                     }
-                    if (std::string(sleaf.name()) == "poll-interval" && component) {
-                        component->pollInterval = leaf.value()->uint32();
+                } else {
+                    if (schema.asLeaf().isKey()) {
+                        component = std::make_shared<ComponentData>(node.asTerm().valueStr());
+                        hwConfigData.push_back(component);
+                    } else if (component) {
+                        if (std::string(schema.name()) == "class") {
+                            component->classType = node.asTerm().valueStr();
+                        } else if (std::string(schema.name()) == "parent") {
+                            component->parentName = node.asTerm().valueStr();
+                        } else if (std::string(schema.name()) == "parent-rel-pos") {
+                            component->parent_rel_pos = std::get<int32_t>(node.asTerm().value());
+                        } else if (std::string(schema.name()) == "alias") {
+                            component->alias = node.asTerm().valueStr();
+                        } else if (std::string(schema.name()) == "asset-id") {
+                            component->assetID = node.asTerm().valueStr();
+                        }
                     }
-                    break;
                 }
-                case LYS_LEAFLIST: {
-                    Data_Node_Leaf_List leaflist(node);
-                    Schema_Node_Leaflist sleaf(schema);
-                    if (!isSensorNotification && component && std::string(sleaf.name()) == "uri") {
-                        component->uri.emplace_back(leaflist.value_str());
-                    }
-                    break;
+                if (std::string(schema.name()) == "poll-interval" && component) {
+                    component->pollInterval = std::get<uint32_t>(node.asTerm().value());
                 }
-                default:
-                    break;
+                break;
+            }
+            case libyang::NodeType::Leaflist: {
+                if (!isSensorNotification && component && std::string(schema.name()) == "uri") {
+                    component->uri.emplace_back(node.asTerm().valueStr());
                 }
+                break;
+            }
+            default:
+                break;
             }
         }
     }

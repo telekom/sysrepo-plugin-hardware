@@ -24,7 +24,7 @@
         <name>coretemp/temp1</name>
         <class xmlns:iana-hardware="urn:ietf:params:xml:ns:yang:iana-hardware">iana-hardware:sensor</class>
         <sensor-notifications xmlns="http://terastrm.net/ns/yang/sensor-notifications-augment">
-            <poll-interval>10</poll-interval>
+            <poll-interval>20</poll-interval>
             <threshold>
                 <name>critical</name>
                 <value>75</value>

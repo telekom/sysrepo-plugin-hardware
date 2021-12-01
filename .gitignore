@@ -1,2 +1,3 @@
 build/
 dt-build-steps
+compile-commands.json

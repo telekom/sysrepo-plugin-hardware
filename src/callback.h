@@ -16,44 +16,48 @@
 #include <utils/rapidjson/document.h>
 #include <utils/rapidjson/istreamwrapper.h>
 
-#include "hardware_sensors.h"
 #include <chrono>
 #include <fstream>
+#include <hardware_sensors.h>
 #include <mutex>
+#include <sysrepo-cpp/Enum.hpp>
 
 namespace hardware {
 
 struct Callback {
-    using S_Session = sysrepo::S_Session;
+    using Session = sysrepo::Session;
+    using ErrorCode = sysrepo::ErrorCode;
+    using Event = sysrepo::Event;
     using Value = rapidjson::Value;
     using Document = rapidjson::Document;
     using IStreamWrapper = rapidjson::IStreamWrapper;
 
-    static int configurationCallback(S_Session session,
-                                     char const* module_name,
-                                     char const* /* xpath */,
-                                     sr_event_t /* event */,
-                                     uint32_t /* request_id */) {
-        printCurrentConfig(session, module_name);
+    static ErrorCode configurationCallback(Session session,
+                                           uint32_t subscriptionId,
+                                           std::string_view moduleName,
+                                           std::optional<std::string_view> /* subXPath */,
+                                           Event /* event */,
+                                           uint32_t /* request_id */) {
+        printCurrentConfig(session, moduleName);
         logMessage(SR_LL_DBG, "Processing received configuration.");
         HardwareSensors::getInstance().notifyAndJoin();
-        { ComponentData::populateConfigData(session, module_name); }
+        ComponentData::populateConfigData(session, moduleName);
         HardwareSensors::getInstance().startThreads();
-        return SR_ERR_OK;
+        return ErrorCode::Ok;
     }
 
-    static int operationalCallback(S_Session session,
-                                   const char* module_name,
-                                   const char* /* path */,
-                                   const char* /* request_xpath */,
-                                   uint32_t /* request_id */,
-                                   S_Data_Node& parent) {
-        parent = nullptr;
+    static ErrorCode operationalCallback(Session session,
+                                         uint32_t subscriptionId,
+                                         std::string_view moduleName,
+                                         std::optional<std::string_view> /* subXPath */,
+                                         std::optional<std::string_view> /* requestXPath */,
+                                         uint32_t /* requestId */,
+                                         std::optional<libyang::DataNode>& parent) {
 
         int rc = system("/usr/bin/lshw -json > " COMPONENTS_LOCATION);
         if (rc == -1) {
             logMessage(SR_LL_ERR, "lshw command failed");
-            return SR_ERR_CALLBACK_FAILED;
+            return ErrorCode::CallbackFailed;
         }
         logMessage(SR_LL_DBG, "lshw command returned:" + std::to_string(rc));
         std::string const set_xpath("/ietf-hardware:hardware");
@@ -69,14 +73,14 @@ struct Callback {
         std::ifstream ifs(COMPONENTS_LOCATION, std::ifstream::in);
         if (ifs.fail()) {
             logMessage(SR_LL_ERR, "Can't open: " COMPONENTS_LOCATION);
-            return SR_ERR_CALLBACK_FAILED;
+            return ErrorCode::CallbackFailed;
         }
         IStreamWrapper isw(ifs);
         Document doc;
         doc.ParseStream(isw);
         if (!doc.IsObject() && !doc.IsArray()) {
             logMessage(SR_LL_ERR, "lshw json root-node is not an object or array");
-            return SR_ERR_CALLBACK_FAILED;
+            return ErrorCode::CallbackFailed;
         }
 
         ComponentMap hwComponents;
@@ -89,14 +93,14 @@ struct Callback {
         }
 
         for (auto const& c : hwComponents) {
-            c.second->setXpathForAllMembers(session, parent, set_xpath);
+            c.second->setXpathForAllMembers(session, parent, set_xpath, moduleName);
         }
 
         if (!parent) {
             logMessage(SR_LL_ERR, "No nodes were set");
-            return SR_ERR_CALLBACK_FAILED;
+            return ErrorCode::CallbackFailed;
         }
-        return SR_ERR_OK;
+        return ErrorCode::Ok;
     }
 
     static std::string toIANAclass(std::string const& inputClass) {
@@ -232,16 +236,18 @@ struct Callback {
         return siblings;
     }
 
-    static void printCurrentConfig(S_Session& session, char const* module_name) {
+    static void printCurrentConfig(Session& session, std::string_view module_name) {
         try {
-            std::string xpath(std::string("/") + module_name + std::string(":*//*"));
-            auto values = session->get_items(xpath.c_str());
-            if (values == nullptr)
+            std::string xpath(std::string("/") + std::string(module_name) + std::string(":*//*"));
+            auto values = session.getData(xpath.c_str());
+            if (!values)
                 return;
 
-            for (unsigned int i = 0; i < values->val_cnt(); i++)
-                logMessage(SR_LL_DBG, values->val(i)->to_string());
-
+            std::string const toPrint(
+                values.value()
+                    .printStr(libyang::DataFormat::JSON, libyang::PrintFlags::WithSiblings)
+                    .value());
+            logMessage(SR_LL_DBG, toPrint.c_str());
         } catch (const std::exception& e) {
             logMessage(SR_LL_WRN, e.what());
         }

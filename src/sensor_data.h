@@ -95,9 +95,10 @@ struct Sensor : public ComponentData {
         return returnedType;
     }
 
-    void setXpathForAllMembers(sysrepo::S_Session& session,
-                               libyang::S_Data_Node& parent,
-                               std::string const& mainXpath) const override {
+    void setXpathForAllMembers(Session& session,
+                               std::optional<libyang::DataNode>& parent,
+                               std::string const& mainXpath,
+                               std::string_view moduleName) const override {
         std::string sensorPath = mainXpath + "/component[name='" + name + "']";
         logMessage(SR_LL_DBG, "Setting values for component: " + name);
 

@@ -12,6 +12,7 @@
 #define GLOBALS_H
 
 #include <sysrepo-cpp/Session.hpp>
+#include <sysrepo.h>
 
 #define COMPONENTS_LOCATION "/tmp/hardware_components.json"
 #define DEFAULT_POLL_INTERVAL 60  // seconds
@@ -22,35 +23,32 @@ struct SensorsInitFail : public std::exception {
     }
 };
 
-static void logMessage(sr_log_level_t log, std::string msg) {
-    msg = "IETF-Hardware: " + msg;
+static void logMessage(sr_log_level_t log, std::string const& msg) {
     switch (log) {
     case SR_LL_ERR:
-        SRP_LOG_ERRMSG(msg.c_str());
+        SRPLG_LOG_ERR("IETF-Hardware", msg.c_str());
         break;
     case SR_LL_WRN:
-        SRP_LOG_WRNMSG(msg.c_str());
+        SRPLG_LOG_WRN("IETF-Hardware", msg.c_str());
         break;
     case SR_LL_INF:
-        SRP_LOG_INFMSG(msg.c_str());
+        SRPLG_LOG_INF("IETF-Hardware", msg.c_str());
         break;
     case SR_LL_DBG:
     default:
-        SRP_LOG_DBGMSG(msg.c_str());
+        SRPLG_LOG_DBG("IETF-Hardware", msg.c_str());
     }
 }
 
-static bool setXpath(sysrepo::S_Session& session,
-                     libyang::S_Data_Node& parent,
+static bool setXpath(sysrepo::Session& session,
+                     std::optional<libyang::DataNode>& parent,
                      std::string const& node_xpath,
                      std::string const& value) {
     try {
-        libyang::S_Context ctx = session->get_context();
         if (parent) {
-            parent->new_path(ctx, node_xpath.c_str(), value.c_str(), LYD_ANYDATA_CONSTSTRING, 0);
+            parent.value().newPath(node_xpath.c_str(), value.c_str());
         } else {
-            parent = std::make_shared<libyang::Data_Node>(ctx, node_xpath.c_str(), value.c_str(),
-                                                          LYD_ANYDATA_CONSTSTRING, 0);
+            parent = session.getContext().newPath(node_xpath.c_str(), value.c_str());
         }
     } catch (std::runtime_error const& e) {
         logMessage(SR_LL_WRN,

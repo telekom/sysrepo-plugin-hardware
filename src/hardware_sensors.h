@@ -23,9 +23,15 @@ namespace hardware {
 
 struct HardwareSensors {
 
+    using Connection = sysrepo::Connection;
+
     static HardwareSensors& getInstance() {
         static HardwareSensors instance;
         return instance;
+    }
+
+    void injectConnection(Connection conn) {
+        mConn = std::make_shared<Connection>(conn);
     }
 
 private:
@@ -49,21 +55,21 @@ private:
         if (!mConn) {
             return;
         }
-        auto sess = std::make_shared<sysrepo::Session>(mConn);
+        auto sess = mConn->sessionStart();
 
-        auto in_vals = std::make_shared<sysrepo::Vals>(4);
-        in_vals->val(0)->set((notifPath + "/threshold-name").c_str(), sensThr->name.c_str(),
-                             SR_STRING_T);
-        in_vals->val(1)->set((notifPath + "/threshold-value").c_str(), sensThr->value);
+        auto input = sess.getContext().newPath((notifPath + "/threshold-name").c_str(),
+                                               sensThr->name.c_str());
+        input.newPath((notifPath + "/threshold-value").c_str(),
+                      std::to_string(sensThr->value).c_str());
         if (sensorValue > sensThr->value) {
-            in_vals->val(2)->set((notifPath + "/rising").c_str(), nullptr, SR_LEAF_EMPTY_T);
+            input.newPath((notifPath + "/rising").c_str(), nullptr);
         } else {
-            in_vals->val(2)->set((notifPath + "/falling").c_str(), nullptr, SR_LEAF_EMPTY_T);
+            input.newPath((notifPath + "/falling").c_str(), nullptr);
         }
 
-        in_vals->val(3)->set((notifPath + "/sensor-value").c_str(), sensorValue);
+        input.newPath((notifPath + "/sensor-value").c_str(), std::to_string(sensorValue).c_str());
 
-        sess->event_notif_send(notifPath.c_str(), in_vals);
+        sess.sendNotification(input, sysrepo::Wait::No);
     }
 
     void runFunc(std::shared_ptr<ComponentData> component) {
@@ -77,7 +83,7 @@ private:
             for (auto const& sensThr : component->sensorThresholds) {
                 try {
                     checkAndTriggerNotification(component->name, sensThr, value.value());
-                } catch (sysrepo::sysrepo_exception& ex) {
+                } catch (std::exception& ex) {
                     logMessage(SR_LL_WRN, "Sending notification failed: " + std::string(ex.what()));
                 }
             }
@@ -117,8 +123,6 @@ public:
     }
 
     void startThreads() {
-        std::call_once(mConnConstructed,
-                       [&]() { mConn = std::make_shared<sysrepo::Connection>(); });
         for (auto const& configData : ComponentData::hwConfigData) {
             if (configData && !configData->sensorThresholds.empty()) {
                 logMessage(SR_LL_DBG, "Starting thread for component: " + configData->name + ".");
@@ -239,8 +243,7 @@ public:
     }
 
 private:
-    std::once_flag mConnConstructed;
-    sysrepo::S_Connection mConn;
+    std::shared_ptr<Connection> mConn;
     std::mutex mSysrepoMtx;
     std::mutex mNotificationMtx;
     std::condition_variable mCV;
