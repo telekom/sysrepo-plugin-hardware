@@ -44,7 +44,6 @@ private:
     void checkAndTriggerNotification(std::string const& componentName,
                                      std::shared_ptr<SensorThreshold> sensThr,
                                      int32_t sensorValue) {
-        std::lock_guard lk(mSysrepoMtx);
         logMessage(SR_LL_INF, "Sensor threshold triggered for: " + componentName + " value " +
                                   std::to_string(sensorValue) + ". Sending Notification...");
 
@@ -73,6 +72,7 @@ private:
     }
 
     void runFunc(std::shared_ptr<ComponentData> component) {
+        // TSAN falsely reports double lock on the mutex here for some compiler versions
         std::unique_lock<std::mutex> lk(mNotificationMtx);
         while (mCV.wait_for(lk, std::chrono::seconds(component->pollInterval)) ==
                std::cv_status::timeout) {
@@ -244,7 +244,6 @@ public:
 
 private:
     std::shared_ptr<Connection> mConn;
-    std::mutex mSysrepoMtx;
     std::mutex mNotificationMtx;
     std::condition_variable mCV;
     std::mutex mSensorDataMtx;
