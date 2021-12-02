@@ -29,7 +29,7 @@ std::string const HardwareModel::moduleName = "ietf-hardware";
 int sr_plugin_init_cb(sr_session_ctx_t* session, void** /*private_data*/) {
     sysrepo::Connection conn;
     sysrepo::Session ses = conn.sessionStart();
-    std::string oper_xpath("/" + HardwareModel::moduleName + ":" + "hardware");
+    std::string const oper_xpath("/" + HardwareModel::moduleName + ":" + "hardware");
     try {
         hardware::HardwareSensors::getInstance().injectConnection(conn);
         sysrepo::Subscription sub = ses.onModuleChange(

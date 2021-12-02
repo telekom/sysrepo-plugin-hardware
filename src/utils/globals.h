@@ -24,19 +24,20 @@ struct SensorsInitFail : public std::exception {
 };
 
 static void logMessage(sr_log_level_t log, std::string const& msg) {
+    std::string const _("IETF-Hardware");
     switch (log) {
     case SR_LL_ERR:
-        SRPLG_LOG_ERR("IETF-Hardware", msg.c_str());
+        SRPLG_LOG_ERR(_.c_str(), msg.c_str());
         break;
     case SR_LL_WRN:
-        SRPLG_LOG_WRN("IETF-Hardware", msg.c_str());
+        SRPLG_LOG_WRN(_.c_str(), msg.c_str());
         break;
     case SR_LL_INF:
-        SRPLG_LOG_INF("IETF-Hardware", msg.c_str());
+        SRPLG_LOG_INF(_.c_str(), msg.c_str());
         break;
     case SR_LL_DBG:
     default:
-        SRPLG_LOG_DBG("IETF-Hardware", msg.c_str());
+        SRPLG_LOG_DBG(_.c_str(), msg.c_str());
     }
 }
 
