@@ -17,6 +17,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <mutex>
+#include <sysrepo-cpp/Connection.hpp>
 #include <thread>
 
 namespace hardware {
