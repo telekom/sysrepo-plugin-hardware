@@ -39,7 +39,7 @@ pthreads
 lshw
 ```
 
-The libyang and sysrepo dependencies should be compiled from their public repositories `libyang1` branches.
+The `main` or `master` branch should be compiled using the the master branches of `libyang` and `sysrepo`. The `libyang1` branch is outdated and only works with the old versions of libyang and sysrepo.
 
 ### Build
 
