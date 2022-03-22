@@ -34,7 +34,7 @@ You are welcome to contribute code in order to fix a bug or to implement a new f
 
 The following rule governs code contributions:
 
-* Contributions must be licensed under the [MIT License](LICENSE)
+* Contributions must be licensed under the [BSD 3-Clause License](LICENSE)
 * Newly created files must be opened by an instantiated version to the file 'templates/file-header.txt'
 * At least if you add a new file to the repository, add your name into the contributor section of the file NOTICE (please respect the preset entry structure)
 
@@ -44,7 +44,7 @@ You are welcome to contribute documentation to the project.
 
 The following rule governs documentation contributions:
 
-* Contributions must be licensed under the same license as code, the [MIT License](LICENSE)
+* Contributions must be licensed under the same license as code, the [BSD 3-Clause License](LICENSE)
 
 ## Pull Request Checklist
 
