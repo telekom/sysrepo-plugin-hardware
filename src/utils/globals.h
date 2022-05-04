@@ -47,9 +47,9 @@ static bool setXpath(sysrepo::Session& session,
                      std::string const& value) {
     try {
         if (parent) {
-            parent.value().newPath(node_xpath.c_str(), value.c_str());
+            parent.value().newPath(node_xpath, value);
         } else {
-            parent = session.getContext().newPath(node_xpath.c_str(), value.c_str());
+            parent = session.getContext().newPath(node_xpath, value);
         }
     } catch (std::runtime_error const& e) {
         logMessage(SR_LL_WRN,

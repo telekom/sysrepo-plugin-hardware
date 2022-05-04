@@ -57,17 +57,15 @@ private:
         }
         auto sess = mConn->sessionStart();
 
-        auto input = sess.getContext().newPath((notifPath + "/threshold-name").c_str(),
-                                               sensThr->name.c_str());
-        input.newPath((notifPath + "/threshold-value").c_str(),
-                      std::to_string(sensThr->value).c_str());
+        auto input = sess.getContext().newPath((notifPath + "/threshold-name"), sensThr->name);
+        input.newPath((notifPath + "/threshold-value"), std::to_string(sensThr->value));
         if (sensorValue > sensThr->value) {
-            input.newPath((notifPath + "/rising").c_str(), nullptr);
+            input.newPath((notifPath + "/rising"), std::nullopt);
         } else {
-            input.newPath((notifPath + "/falling").c_str(), nullptr);
+            input.newPath((notifPath + "/falling"), std::nullopt);
         }
 
-        input.newPath((notifPath + "/sensor-value").c_str(), std::to_string(sensorValue).c_str());
+        input.newPath((notifPath + "/sensor-value"), std::to_string(sensorValue));
 
         sess.sendNotification(input, sysrepo::Wait::No);
     }

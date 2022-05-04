@@ -248,7 +248,7 @@ struct Callback {
     static void printCurrentConfig(Session& session, std::string_view module_name) {
         try {
             std::string xpath(std::string("/") + std::string(module_name) + std::string(":*//*"));
-            auto values = session.getData(xpath.c_str());
+            auto values = session.getData(xpath);
             if (!values)
                 return;
 
@@ -256,7 +256,7 @@ struct Callback {
                 values.value()
                     .printStr(libyang::DataFormat::JSON, libyang::PrintFlags::WithSiblings)
                     .value());
-            logMessage(SR_LL_DBG, toPrint.c_str());
+            logMessage(SR_LL_DBG, toPrint);
         } catch (const std::exception& e) {
             logMessage(SR_LL_WRN, e.what());
         }

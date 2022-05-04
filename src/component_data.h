@@ -253,7 +253,7 @@ struct ComponentData {
 
     static void populateConfigData(Session& session, std::string_view module_name) {
         std::string const data_xpath(std::string("/") + std::string(module_name) + ":hardware");
-        auto const& data(session.getData(data_xpath.c_str()));
+        auto const& data(session.getData(data_xpath));
         if (!data) {
             logMessage(SR_LL_ERR, "No data found for population.");
             return;

@@ -33,10 +33,10 @@ int sr_plugin_init_cb(sr_session_ctx_t* session, void** /*private_data*/) {
     try {
         hardware::HardwareSensors::getInstance().injectConnection(conn);
         sysrepo::Subscription sub = ses.onModuleChange(
-            HardwareModel::moduleName.c_str(), &hardware::Callback::configurationCallback, std::nullopt,
-            0, sysrepo::SubscribeOptions::Enabled | sysrepo::SubscribeOptions::DoneOnly);
-        sub.onOperGet(HardwareModel::moduleName.c_str(), &hardware::Callback::operationalCallback,
-                      oper_xpath.c_str());
+            HardwareModel::moduleName, &hardware::Callback::configurationCallback, std::nullopt, 0,
+            sysrepo::SubscribeOptions::Enabled | sysrepo::SubscribeOptions::DoneOnly);
+        sub.onOperGet(HardwareModel::moduleName, &hardware::Callback::operationalCallback,
+                      oper_xpath);
         theModel.sub = std::make_shared<sysrepo::Subscription>(std::move(sub));
     } catch (std::exception const& e) {
         logMessage(SR_LL_ERR, std::string("sr_plugin_init_cb: ") + e.what());
