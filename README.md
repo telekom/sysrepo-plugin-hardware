@@ -17,6 +17,8 @@
   <a href="#licensing">Licensing</a>
 </p>
 
+The development of this plugin has been moved to [telekom/sysrepo-plugins](https://github.com/telekom/sysrepo-plugins/tree/main/plugins/ietf-hardware-plugin).
+
 The goal of this project is to create a Debian implementation of the IETF-Hardware YANG module disregarding any SNMP approach.
 
 ## About this component
